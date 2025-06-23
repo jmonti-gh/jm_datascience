@@ -1,0 +1,21 @@
+Metadata-Version: 2.4
+Name: jm_datascience
+Version: 0.1.0
+Summary: # jm_datascience
+Author-email: Jorge Monti <jorgitomonti@gmail.com>
+License: MIT
+Keywords: utils,utilities,pandas,numpy,datetime
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: End Users/Desktop
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Utilities
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+
+# jm_datascience
+a Package

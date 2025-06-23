@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jm_datascience"
+dynamic = ["description", "version"]
+authors = [
+    {name = "Jorge Monti", email = "jorgitomonti@gmail.com"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.11"
+keywords = ["utils", "utilities", "pandas", "numpy", "datetime"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Utilities"
+]
+
+[tool.setuptools.dynamic]
+description = {file = ["README.md"]}
+version = {attr = "jm_datascience.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["jm_datascience*"]
+
+[tool.hatch.version]
+path = "jm_datascience/__init__.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+## jm- Probar los pyproject.toml
+# python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb')))"

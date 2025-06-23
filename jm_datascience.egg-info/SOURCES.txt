@@ -1,0 +1,10 @@
+README.md
+pyproject.toml
+jm_datascience/__init__.py
+jm_datascience/jm_numpy.py
+jm_datascience/jm_pandas.py
+jm_datascience/jm_pdaccessor.py
+jm_datascience.egg-info/PKG-INFO
+jm_datascience.egg-info/SOURCES.txt
+jm_datascience.egg-info/dependency_links.txt
+jm_datascience.egg-info/top_level.txt
