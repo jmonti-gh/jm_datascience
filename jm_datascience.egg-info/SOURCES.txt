@@ -1,6 +1,7 @@
 README.md
 pyproject.toml
 jm_datascience/__init__.py
+jm_datascience/jm_charts.py
 jm_datascience/jm_numpy.py
 jm_datascience/jm_pandas.py
 jm_datascience/jm_pdaccessor.py

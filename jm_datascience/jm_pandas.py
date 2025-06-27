@@ -12,6 +12,11 @@ __python_requires__ = ">=3.11"
 __last_modified__ = "2025-06-30"
 
 
+## Standard Libs
+from typing import Union, Optional, Tuple, Dict, Any
+import warnings
+
+# Third-Party Libs
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -44,25 +49,60 @@ def format_value(value, width=8, decimals=2, miles=','):
         
     except (ValueError, TypeError):
         return str(value).rjust(width)                      # Alinea también strings, para mantener la grilla
-    
 
-def to_serie(serie):
-    ''' Convert df-column, or numpy-array, or list to pd.Serie '''
-    try:
-        if isinstance(serie, pd.DataFrame) and len(serie.columns) == 1:     # If serie is a DataFrame with one column
-            pdserie = serie.iloc[:, 0]                                      # Convert to pd.Series
-        elif isinstance(serie, pd.Series):                                  # If serie is already a Series
-            pdserie = serie                                                 # No conversion needed      
-        elif isinstance(serie, np.ndarray):                                 # If serie is a NumPy array   
-            pdserie = pd.Series(serie.flatten())
-        elif isinstance(serie, list):                                       # If serie is a list
-            pdserie = pd.Series(serie)
-        elif not isinstance(serie, pd.Series):                              # If serie is not a Series
-            raise ValueError("Input must be a pandas Series, DataFrame with one column, NumPy array, or list.")
-    except Exception as e:
-        raise ValueError("Input must be a pandas Series, DataFrame with one column, NumPy array, or list.") from e
+
+def to_serie(data: Union[pd.Series, np.ndarray, dict, list, pd.DataFrame]) -> pd.Series:
+    '''
+    Convert df of one or two columns, or numpy-array, or list, or dict to pd.Serie.
     
+    Param -> data: df of one or two columns, or numpy-array, or list, or dict to pd.Serie.
+    Returns: pd.Series
+    '''
+
+    if isinstance(data, pd.Series):                 # If serie is already a Series
+        pdserie = data                              # No conversion needed      
+    elif isinstance(data, np.ndarray):              # If data is a NumPy array   
+        pdserie = pd.Series(data.flatten())
+    elif isinstance(data, dict):
+        pdserie = pd.Series(data)
+    elif isinstance(data, list):                    # If data is a list
+        pdserie = pd.Series(data)
+    elif isinstance(data, pd.DataFrame):
+        if data.shape[1] == 1:                      # Also len(data.columns == 1)
+            pdserie = data                          # Also pdserie = serie.iloc[:, 0]
+        else:
+            raise ValueError("DataFrame must exactly have 1 column: Categories -> index")
+    else:
+        raise TypeError(f"Unsupported data type: {type(data)}. "
+                    "Supported types: pd.Series, np.ndarray, pd.DataFrame, dict, list")
+
     return pdserie
+
+
+def to_categorical_serie(data: Union[pd.Series, np.ndarray, dict, list, pd.DataFrame]) -> pd.Series:
+    '''
+    Build a categorical (base of Freq. Dist. Table) of input
+    '''
+    if isinstance(data, pd.Series):                 # If serie is already a Series
+        cat_serie = data                            # No conversion needed      
+    elif isinstance(data, np.ndarray):              # If data is a NumPy array   
+        cat_serie = pd.Series(data.flatten()).value_counts()
+    elif isinstance(data, dict):
+        cat_serie = pd.Series(data)
+    elif isinstance(data, list):                    # If data is a list
+        cat_serie = pd.Series(data).value_counts()
+    elif isinstance(data, pd.DataFrame):
+        if data.shape[1] == 1:                      # Also len(data.columns == 1)
+            cat_serie = data.value_counts()         # Also cat_serie = serie.iloc[:, 0]
+        elif data.shape[1] == 2:                    # Index: first col, Data: 2nd Col
+            cat_serie = data.set_index(data.columns[0])[data.columns[1]]
+        else:
+            raise ValueError("DataFrame must have 1 oer 2 columns. Categories and values for 2 columns cases.")
+    else:
+        raise TypeError(f"Unsupported data type: {type(data)}. "
+                    "Supported types: pd.Series, np.ndarray, pd.DataFrame, dict, list")
+
+    return cat_serie
 
 
 def describeplus(data, decimals: int = 2) -> pd.DataFrame:
@@ -167,7 +207,7 @@ def plt_piechart(data, title='Pie Chart', figsize=(6, 6), autopct='%.2f%%', pale
 
     fig, ax = plt.subplots(figsize=figsize)
 
-    cmap = plt.get_cmap(palette, len(data))            # Use 'viridis' colormap
+    cmap = plt.get_cmap(palette, len(data))                 # Use 'viridis' colormap
     colors_virdis = [cmap(i) for i in range(len(data))]     # Get colors from the colormap
 
     ax.pie(x=data,
