@@ -85,8 +85,9 @@ class JMAccessor:
         for col in df.columns:                          # Para evitar basura micronésima
             if pd.api.types.is_float_dtype(df[col]):
                 df[col] = df[col].apply(lambda x: round(x) if x % 1 > 0.99999 else x)
+                df[col] = df[col].convert_dtypes()
                 if df[col].apply(lambda x: True if x % 1 < 0.00001 or pd.isna(x) else False).all():
-                    df[col] = df[col].astype('Int64')
+                    df[col] = df[col].round(8).astype('Int64')
 
 
         df = df.convert_dtypes()
@@ -112,11 +113,6 @@ class JMAccessor:
                     self._obj[col].min() if pd.api.types.is_numeric_dtype(self._obj[col]) or 
                                         pd.api.types.is_datetime64_any_dtype(self._obj[col]) else None
                     for col in self._obj.columns
-                    # for col in self._obj.columns:
-                    #     try:
-                    #         self._obj[col].min()
-                    #     except:
-                    #         None
                 ],
                 'Max-Value': [
                     self._obj[col].max() if pd.api.types.is_numeric_dtype(self._obj[col]) or 
