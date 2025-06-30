@@ -189,9 +189,58 @@ def clean_df(df):
     return df_clean
 
 
+def is_mostly_numeric(serie, threshold):
+    ''' Checks if at least 'threshold'% of the values ​​can be numeric'''
+    converted = pd.to_numeric(serie, errors='coerce')
+    numeric_ratio = converted.notna().sum() / len(serie)
+    return numeric_ratio >= threshold
+
+
+def petty_decimals_and_str(serie):
+    for ix, value in serie.items():
+        if isinstance(value, str):
+            print(f"String -> {ix = } - {value = }")
+        elif isinstance(value, float):
+            if value % 1 > 0:
+                print(f"float -> {ix = } - {value = }")
+
+
+
 ## CHARTs Functions
 
-def plt_piechart(data, title='Pie Chart', figsize=(6, 6), autopct='%.2f%%', palette='viridis', rotate=45):
+def get_colorblind_palette():
+    """
+    Retorna una lista de colores (hexadecimales) amigables para personas
+    con daltonismo, equivalentes a sns.color_palette('colorblind').
+    """
+    return [
+        '#0173B2',  # Azul
+        '#DE8F05',  # Naranja
+        '#029E73',  # Verde
+        '#D55E00',  # Bermellón
+        '#CC78BC',  # Violeta rojizo
+        '#CA9161',  # Marrón amarillento
+        '#FBAFE4',  # Rosa
+        '#949494',  # Gris
+        '#ECE133',  # Amarillo
+        '#56B4E9'   # Azul cielo
+    ]
+
+
+def plt_piechart(
+        data,
+        figsize = (6, 6),
+        palette = 'colorblind',
+        startangle = 0,
+        rotate = 0,
+        label_size = 15,
+        title = 'Pie Chart',
+        title_size = 20,
+        autopct = '%.2f%%',
+        legend_loc = 'best',
+        legend_size = 15,
+
+    ):
     """
     Create a pie chart from a specified column in a DataFrame.
     
@@ -201,30 +250,288 @@ def plt_piechart(data, title='Pie Chart', figsize=(6, 6), autopct='%.2f%%', pale
     - figsize (float, float): Size of the figure.
     - autopct (str_format): Format for displaying percentages.
     """
-    serie = to_serie(data)
-    if len(serie) > 6:
-        raise ValueError("Too many values. Max values count: six (6)")
+
+    # Validate maximum categories
+    if len(data) > 9:
+        raise ValueError(f"Data contains {len(data)} categories. "
+                        "Maximum allowed is 9 categories.")
 
     fig, ax = plt.subplots(figsize=figsize)
 
-    cmap = plt.get_cmap(palette, len(data))                 # Use 'viridis' colormap
-    colors_virdis = [cmap(i) for i in range(len(data))]     # Get colors from the colormap
+    # Colors - colors_palette
+    if palette == 'colorblind':
+        colors_palette = get_colorblind_palette()
+    else:
+        cmap = plt.get_cmap(palette, len(data))                 # Use palette colormap
+        colors_palette = [cmap(i) for i in range(len(data))]    # Get colors from the colormap
 
+    # autopct
+    autopct_function = None
+
+    def make_autopct(values, format_string):                    # A closure: a function that return a new function
+        value_iterator = iter(values)                           # 1. Mk an iterator of the original values      
+        
+        def my_autopct(pct):
+            absolute_value = next(value_iterator)               # 2. Get next value from iterator
+            percentage_string = format_string % pct             # 3. Format percentage using autopct. El operador '%' aplica el formato al valor 'pct'.
+            return f"{absolute_value} ({percentage_string})"     
+        
+        return my_autopct
+    
+    autopct_function = make_autopct(data.values, autopct)
+    
     ax.pie(x=data,
-           colors=colors_virdis, 
-           autopct=autopct,
-           textprops={'size': 'x-large',
+           colors=colors_palette,
+           startangle=startangle,
+           autopct=autopct_function,
+           textprops={'size': label_size,
                       'color': 'w',
                       'rotation': rotate,
                       'weight': 'bold'})
 
-    ax.set_title(title, fontdict={'size': 15, 'weight': 'bold'})
+    ax.set_title(title, fontdict={'size': title_size, 'weight': 'bold'})
     
     ax.legend(data.index,
-              loc='upper right',
+              loc=legend_loc,
               bbox_to_anchor=(1, 0, 0.2, 1),
-              prop={'size': 'small'})
+              prop={'size': legend_size})
 
+    return fig, ax
+
+
+# Aux Funct. to Create external horizontal labels with connection lines.
+def _create_external_labels(
+    ax: plt.Axes, 
+    wedges: list, 
+    categories: list, 
+    values: np.ndarray, 
+    percentages: np.ndarray,
+    label_size: int
+) -> None:
+    """
+    Create external horizontal labels with connection lines.
+    
+    Parameters
+    ----------
+    ax : plt.Axes
+        Matplotlib axes object.
+    wedges : list
+        List of wedge objects from pie chart.
+    categories : list
+        List of category names.
+    values : np.ndarray
+        Array of frequency values.
+    percentages : np.ndarray
+        Array of percentage values.
+    """
+    # Calculate label positions
+    label_distance = 1.3
+    connection_distance = 1.15
+    
+    for i, (wedge, category, value, percentage) in enumerate(zip(wedges, categories, values, percentages)):
+        # Get the angle of the wedge center
+        angle = (wedge.theta1 + wedge.theta2) / 2
+        
+        # Convert angle to radians
+        angle_rad = np.radians(angle)
+        
+        # Calculate connection point on wedge edge
+        connection_x = connection_distance * np.cos(angle_rad)
+        connection_y = connection_distance * np.sin(angle_rad)
+        
+        # Calculate label position
+        label_x = label_distance * np.cos(angle_rad)
+        label_y = label_distance * np.sin(angle_rad)
+        
+        # Determine horizontal alignment based on position
+        ha = 'left' if label_x > 0 else 'right'
+        
+        # Adjust label position for better horizontal alignment
+        if ha == 'left':
+            label_x += 0.1
+        else:
+            label_x -= 0.1
+        
+        # Create label text
+        label_text = f'{category}\n{int(value)} ({percentage}%)'
+        
+        # Add connection line
+        ax.annotate('', xy=(connection_x, connection_y), xytext=(label_x, label_y),
+                   arrowprops=dict(arrowstyle='-', color='gray', lw=1, alpha=0.7))
+        
+        # Add label text
+        ax.text(label_x, label_y, label_text, 
+               horizontalalignment=ha, verticalalignment='center',
+               fontsize=label_size, fontweight='normal',
+               bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
+                        edgecolor='lightgray', alpha=0.8))
+
+
+def plt_piechart2(
+    data: Union[pd.Series, pd.DataFrame, dict, list],
+    kind: str = 'pie',
+    title: Optional[str] = None,
+    title_size: Optional[int] = 20,
+    label_size: Optional[int] = 15,
+    decimals: Optional[int] = 2,
+    figsize: Tuple[int, int] = (9, 7),
+    colors: Optional[list] = None,
+    startangle: float = 0,
+    explode: Optional[list] = None,
+    **kwargs
+) -> Tuple[plt.Figure, plt.Axes]:
+    """
+    Create a pie or donut chart with external horizontal labels.
+    
+    This function generates publication-ready categorical data visualizations with
+    external labels showing category names, frequencies, and percentages. Labels
+    are connected to their corresponding segments via connection lines.
+    
+    Parameters:
+    - data : Union[pd.Series, pd.DataFrame, dict, list] - Input categorical data. Can be:
+        - pd.Series with category names as index and values as frequencies
+        - pd.DataFrame with two columns (categories and values)
+        - dict with categories as keys and frequencies as values
+        - list of category names (frequencies will be counted)
+    
+    - kind : str, default 'pie' - Type of chart to create. Options:
+        - 'pie': Traditional pie chart
+        - 'donut': Donut chart with hollow center
+    
+    - title : str, optional
+        Chart title. If None, no title will be displayed.
+    
+    - figsize : Tuple[int, int],
+        Figure size in inches (width, height).
+    
+    - colors : list, optional
+        List of colors for chart segments. If None, uses matplotlib default colors.
+    
+    - startangle : float, default 90
+        Angle at which the first wedge starts (in degrees).
+    
+    - explode : list, optional
+        List of floats specifying how much to separate each wedge from center.
+        Must have same length as number of categories.
+    
+    **kwargs
+        Additional keyword arguments passed to matplotlib's pie function.
+    
+    Returns
+    -------
+    Tuple[plt.Figure, plt.Axes]
+        Matplotlib figure and axes objects for further customization.
+    
+    Raises
+    ------
+    ValueError
+        If data contains more than 8 categories, if 'kind' parameter is invalid,
+        if data is empty, or if explode list length doesn't match data length.
+    
+    TypeError
+        If data type is not supported.
+    
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> data = pd.Series([25, 30, 20, 15, 10], 
+    ...                  index=['A', 'B', 'C', 'D', 'E'])
+    >>> fig, ax = create_categorical_chart(data, kind='pie', 
+    ...                                   title='Sales by Category')
+    >>> plt.show()
+    
+    >>> # Create donut chart with custom colors
+    >>> colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4']
+    >>> fig, ax = create_categorical_chart(data, kind='donut', 
+    ...                                   colors=colors)
+    >>> plt.show()
+    """
+    
+    # Validate and normalize input data, not empty, positive numbers, and sort for better visualization
+    processed_data = to_categorical_serie(data)
+    
+    if len(processed_data) == 0:
+        raise ValueError("Input data is empty.")
+    
+    if not all(isinstance(val, (np.integer, np.floating)) and val > 0 for val in processed_data.values):
+        raise ValueError("All data values must be positive numbers.")
+    
+    processed_data = processed_data.sort_values(ascending=False)
+    
+    # Validate kind parameter
+    if kind.lower() not in ['pie', 'donut']:
+        raise ValueError(f"Invalid 'kind' parameter: '{kind}'. Must be 'pie' or 'donut'.")
+    
+    # Validate maximum categories
+    if len(processed_data) > 9:
+        raise ValueError(f"Data contains {len(processed_data)} categories. "
+                        "Maximum allowed is 9 categories.")
+    
+    # Validate explode parameter
+    if explode is not None and len(explode) != len(processed_data):
+        raise ValueError(f"Length of 'explode' ({len(explode)}) must match "
+                        f"number of categories ({len(processed_data)}).")
+    
+    # Create figure and axis
+    fig, ax = plt.subplots(figsize=figsize)
+    
+    # Prepare data for plotting
+    categories = processed_data.index.tolist()
+    values = processed_data.values
+    total = values.sum()
+    percentages = (values / total * 100).round(decimals)
+    
+    # Set up colors
+    if colors is None:
+        colors = plt.cm.Set3(np.linspace(0, 1, len(categories)))
+    elif len(colors) < len(categories):
+        warnings.warn(f"Not enough colors provided ({len(colors)}). "
+                     f"Need {len(categories)} colors. Using default colors.")
+        colors = plt.cm.Set3(np.linspace(0, 1, len(categories)))
+    
+    # Configure wedge properties for donut chart
+    wedgeprops = {}
+    if kind.lower() == 'donut':
+        wedgeprops = {'width': 0.5, 'edgecolor': 'white', 'linewidth': 2}
+    else:
+        wedgeprops = {'edgecolor': 'white', 'linewidth': 1}
+
+    
+    # Create the pie/donut chart
+    wedges, texts, autotexts = ax.pie(
+        values,
+        labels=None,  # We'll create custom external labels
+        colors=colors,
+        startangle=startangle,
+        explode=explode,
+        wedgeprops=wedgeprops,
+        autopct='',  # We'll create custom percentage labels
+        pctdistance=0.85,
+        labeldistance=1.1,
+        **kwargs
+    )
+    
+    # Create external labels with connection lines
+    _create_external_labels(ax, wedges, categories, values, percentages, label_size)
+    
+    # Set title
+    if not title:
+        title = f"{kind.title()} Chart"
+        
+    ax.set_title(
+        title,
+        # loc='left',
+        fontdict={'size': title_size, 'weight': 'bold'},
+        x=0.0,                                      # Extremo derecho (1.0 = 100% del ancho del eje)
+        y=1.02,                                     # Ligeramente por encima del área del gráfico
+    )
+    
+    # Ensure equal aspect ratio for circular chart
+    ax.axis('equal')
+    
+    # Adjust layout to prevent label cutoff
+    plt.tight_layout()
+    
     return fig, ax
 
 

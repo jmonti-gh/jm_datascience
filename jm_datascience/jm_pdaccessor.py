@@ -42,8 +42,57 @@ class JMAccessor:
             'columns': list(self._obj.columns),
             'dtypes': self._obj.dtypes.to_dict()
         }
+
+## Tengo algo grosso que hacer para poder calcular valores estadísticos en df reales (donde tengo columnas predonimantemente numericas que contienen NaNs y strings)
+# NO! lo primero puede ser hacer un convert_dtypes() - NOOO por ahora no cambia mucho en caso de datos mezclados
+# 1. tengo que determinar si una columna es predominantemente numérica
+# 2. En caso de ser numerica la convierto ?
     
+    def convert_dtypes_plus(self):
+        '''
+        Hace convert_dtypes() considerando columnas numericas con 'ruido o basura' de strings
+        Y haciendo una segunda conversión a convert_dtypes para evitar falsos float
+        '''
+        df = self._obj.convert_dtypes()
+
+        for col in df.columns:
+            if pd.api.types.is_object_dtype(df[col]):
+                converted = pd.to_numeric(df[col], errors='coerce')      # 'coerce' replace errors (strings) to NaNs
+                numeric_ratio = converted.notna().sum() / len(df[col])   
+                if numeric_ratio >= 0.6:
+                    df[col] = converted
+
+        df1 = df.convert_dtypes()
+        return df1
     
+
+    def convert_dtypes_max(self):
+        '''
+        Hace convert_dtypes() considerando columnas numericas con 'ruido o basura' de strings
+        Y haciendo una segunda conversión a convert_dtypes para evitar falsos float
+        Además redondeando los decimales para evitar ruido micronésimo (!= 0 muyy al final, en este caso 7 ceros)
+        '''
+        df = self._obj.convert_dtypes()
+
+        for col in df.columns:                          # Elimino el ruido (str) de cols y convierto a numérico 
+            if pd.api.types.is_object_dtype(df[col]):
+                converted = pd.to_numeric(df[col], errors='coerce')
+                numeric_ratio = converted.notna().sum() / len(df[col])
+                if numeric_ratio >= 0.6:
+                    df[col] = converted
+            df = df.convert_dtypes()                      # Para evitar floats cuando es mejor Int
+
+        for col in df.columns:                          # Para evitar basura micronésima
+            if pd.api.types.is_float_dtype(df[col]):
+                df[col] = df[col].apply(lambda x: round(x) if x % 1 > 0.99999 else x)
+                if df[col].apply(lambda x: True if x % 1 < 0.00001 or pd.isna(x) else False).all():
+                    df[col] = df[col].astype('Int64')
+
+
+        df = df.convert_dtypes()
+        return df
+
+
     def infomax(self):
         info = {
                 'Column': self._obj.columns,
@@ -63,6 +112,11 @@ class JMAccessor:
                     self._obj[col].min() if pd.api.types.is_numeric_dtype(self._obj[col]) or 
                                         pd.api.types.is_datetime64_any_dtype(self._obj[col]) else None
                     for col in self._obj.columns
+                    # for col in self._obj.columns:
+                    #     try:
+                    #         self._obj[col].min()
+                    #     except:
+                    #         None
                 ],
                 'Max-Value': [
                     self._obj[col].max() if pd.api.types.is_numeric_dtype(self._obj[col]) or 
