@@ -13,32 +13,50 @@ __last_modified__ = "2025-06-30"
 
 
 ## Standard Libs
-from typing import Union, Optional, Tuple, Dict, Any
-import warnings
+from typing import Union, Optional, Any
 
 # Third-Party Libs
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-## Claude
+## Claude - Qwen
 
 
 def format_value(value, width=8, decimals=2, miles=','):
-    ''' Format numeric and string values ​​with right-aligned padding.
-    Args:
-        value: The value to format (can be numeric or string).
-        width: Total width of the formatted string.
-        decimals: Number of decimal places for numeric values.
-        miles: Character to use for thousands separator (',', '_', or None).
-    '''
+    """
+    Format a value (numeric or string) into a right-aligned string of fixed width.
+
+    Converts numeric values to formatted strings with thousands separators and
+    specified decimal places. Strings are padded to the same width for consistent alignment.
+
+    Parameters:
+        value (int, float, str): The value to be formatted.
+        width (int): Total width of the output string. Must be a positive integer.
+        decimals (int): Number of decimal places for numeric values. Must be >= 0.
+        miles (str or None): Thousands separator. Valid options: ',', '_', or None.
+
+    Returns:
+        str: The formatted string with right alignment.
+
+    Raises:
+        ValueError: If width <= 0, decimals < 0, or miles is invalid.
+
+    Examples:
+        >>> format_value(123456.789)
+        '123,456.79'
+        >>> format_value("text", width=10)
+        '      text'
+        >>> format_value(9876, miles=None)
+        '    9876.00'
+    """
     if not isinstance(width, int) or width <= 0:
-        raise ValueError("Width must be a positive integer.")
+        raise ValueError(f"Width must be a positive integer. Not '{width}'")
     
     if not isinstance(decimals, int) or decimals < 0:
-        raise ValueError("Decimals must be a non-negative integer.")
+        raise ValueError(f"Decimals must be a non-negative integer. Not '{decimals}")
     
     if miles not in [',', '_', None]:
-        raise ValueError("Miles must be either ',', '_', or None.")
+        raise ValueError(f"Miles must be either ',', '_', or None. Not '{miles}")
 
     try:
         num = float(value)                                  # Convert to float if possible
@@ -69,7 +87,7 @@ def to_serie(data: Union[pd.Series, np.ndarray, dict, list, pd.DataFrame]) -> pd
         pdserie = pd.Series(data)
     elif isinstance(data, pd.DataFrame):
         if data.shape[1] == 1:                      # Also len(data.columns == 1)
-            pdserie = data                          # Also pdserie = serie.iloc[:, 0]
+            pdserie = data.iloc[:, 0]                         
         else:
             raise ValueError("DataFrame must exactly have 1 column: Categories -> index")
     else:
@@ -91,6 +109,9 @@ def to_categorical_serie(data: Union[pd.Series, np.ndarray, dict, list, pd.DataF
         cat_serie = pd.Series(data)
     elif isinstance(data, list):                    # If data is a list
         cat_serie = pd.Series(data).value_counts()
+    ## OJO acá en DF hay que ver si los valores ya están agrupados 'freq. o count cols' o no !!
+    # tal vez un nuevo parametro como values='nat' (native) or 'freq' (frequency) para saber si tenemos que agrupar (value_couns())
+    # entonces haríamos una sola función to_serie()
     elif isinstance(data, pd.DataFrame):
         if data.shape[1] == 1:                      # Also len(data.columns == 1)
             cat_serie = data.value_counts()         # Also cat_serie = serie.iloc[:, 0]
@@ -208,29 +229,25 @@ def petty_decimals_and_str(serie):
 
 ## CHARTs Functions
 
-def get_colorblind_palette():
+def get_colorblind_palette_list():
     """
     Retorna una lista de colores (hexadecimales) amigables para personas
     con daltonismo, equivalentes a sns.color_palette('colorblind').
     """
     return [
-        '#0173B2',  # Azul
-        '#DE8F05',  # Naranja
-        '#029E73',  # Verde
-        '#D55E00',  # Bermellón
-        '#CC78BC',  # Violeta rojizo
-        '#CA9161',  # Marrón amarillento
-        '#FBAFE4',  # Rosa
-        '#949494',  # Gris
-        '#ECE133',  # Amarillo
-        '#56B4E9'   # Azul cielo
+        '#0173B2', '#DE8F05', '#029E73', '#D55E00', '#CC78BC',
+        '#CA9161', '#FBAFE4', '#949494', '#ECE133', '#56B4E9',
+        '#5D8C3B', '#A93967', '#888888', '#FFC107', '#7C9680',
+        '#E377C2', '#BCBD22', '#AEC7E8', '#FFBB78', '#98DF8A',
+        '#FF9896', '#C5B0D5', '#C49C94', '#F7B6D2', '#DBDB8D',
+        '#9EDAE5', '#D68E3A', '#A65898', '#B2707D', '#8E6C87'
     ]
 
 
-def get_colors(palette):
+def get_colors_list(palette: str, n: Optional[int] = 10) -> list[str]:
     '''
     Return a valid matplotlib palette list
-    - 'colorbind', 'viridis', 'plasma', 'inferno', 'magma', 'cividis' <- daltonic
+    - 'colorbind' <- daltonic, 'viridis', 'plasma', 'inferno', 'magma', 'cividis' <- daltonic, set3, set2
     - 'Accent', 'Accent_r', 'Blues', 'Blues_r', 'BrBG', 'BrBG_r', 'BuGn', 'BuGn_r', 'BuPu', 'BuPu_r', 'CMRmap', 'CMRmap_r', 'Dark2', 'Dark2_r', 'GnBu', 'GnBu_r', 
     'Grays', 'Grays_r', 'Greens', 'Greens_r', 'Greys', 'Greys_r', 'OrRd', 'OrRd_r', 'Oranges', 'Oranges_r', 'PRGn', 'PRGn_r', 'Paired', 'Paired_r', 'Pastel1', 
     'Pastel1_r', 'Pastel2', 'Pastel2_r', 'PiYG', 'PiYG_r', 'PuBu', 'PuBuGn', 'PuBuGn_r', 'PuBu_r', 'PuOr', 'PuOr_r', 'PuRd', 'PuRd_r', 'Purples', 'Purples_r', 
@@ -245,38 +262,103 @@ def get_colors(palette):
     'tab10', 'tab10_r', 'tab20', 'tab20_r', 'tab20b', 'tab20b_r', 'tab20c', 'tab20c_r', 'terrain', 'terrain_r', 'turbo', 'turbo_r', 'twilight', 'twilight_r', 
     'twilight_shifted', 'twilight_shifted_r', 'vanimo', 'vanimo_r', 'viridis', 'viridis_r', 'winter', 'winter_r'",
     '''
+    if n < 6:       # To get a softer range of colors if n is too small           
+        n = 6
+
     if palette == 'colorblind':
-        colors_palette = get_colorblind_palette()
+        colors_list = get_colorblind_palette_list()
+    elif palette == 'set2':
+        colors_list = plt.cm.Set2(np.linspace(0, 1, n))
+    elif palette == 'set3':
+        colors_list = plt.cm.Set3(np.linspace(0, 1, n))
     else:
-        cmap = plt.get_cmap(palette, 10)                 # Use palette colormap
-        colors_palette = [cmap(i) for i in range(10)]    # Get colors from the colormap
+        cmap = plt.get_cmap(palette, n)              # Use palette colormap
+        colors_list = [cmap(i) for i in range(n)]    # Get colors from the colormap
 
-    return colors_palette
-
-
-def is_valid_for_pie(data):
-    if len(data) > 9:
-        raise ValueError(f"Data contains {len(data)} categories. "
-                        "Maximum allowed is 9 categories.")
+    return colors_list
 
 
 def plt_pie(
-        data,
-        scale = 2,
-        kind = 'pie',
-        title = '',
-        palette = 'colorblind',
-        figsize = (),
-        pct_decimals = 2,
-        label_size = 0,
-        title_size = 0
-):
-    ''' Donut chart w/ external legend/label absolute/pct values '''
+    data: Union[pd.Series, pd.DataFrame],
+    scale: Optional[int] = 2,
+    title: Optional[str] = None,
+    kind: Optional[str] = 'pie',
+    label_place: Optional[str] = 'ext',
+    palette: Optional[list] = 'colorblind',
+    startangle: Optional[float] = -40,
+    pct_decimals: Optional[int] = 2,
+    label_rotate: Optional[float] = 0,
+    legend_loc: Optional[str] = 'best',
+) -> tuple[plt.Figure, plt.Axes]:
+    """
+    Generates pie or donut charts for categorical data visualization with customizable labels.
 
-    is_valid_for_pie(data)
+    This function creates a pie or donut chart from categorical data using matplotlib.
+    It supports internal or external labels, custom palettes, and formatting options.
+
+    Parameters:
+        data (pd.Series, pd.DataFrame, dict, or list): Input data. If a list is provided,
+            frequencies are counted automatically.
+        scale (int): Chart scaling factor (1 to 6). Default is 2.
+        title (str or None): Optional title for the chart.
+        kind (str): Type of chart: 'pie' or 'donut'. Default is 'pie'.
+        label_place (str): Placement of labels: 'ext' (external) or 'int' (internal).
+        palette (list of str or None): List of color hex codes for categories.
+        startangle (float): Starting angle in degrees for the first wedge.
+        pct_decimals (int): Number of decimal places for percentage labels. Default is 2.
+        label_rotate (float): Rotation angle for internal labels. Default is 0.
+        legend_loc (str): Position of the legend ('best', 'upper right', etc.). Default is 'best'.
+
+    Returns:
+        tuple[matplotlib.figure.Figure, matplotlib.axes.Axes]: The Figure and Axes objects
+            for further customization.
+
+    Raises:
+        ValueError: If data contains invalid values, if unsupported types are passed,
+            if more than 9 categories are used, or if parameters like scale are out of range.
+        TypeError: If data is not one of the accepted types.
+
+    Examples:
+        >>> import pandas as pd
+        >>> data = pd.Series([25, 30, 20, 15, 10], index=['A', 'B', 'C', 'D', 'E'])
+        >>> fig, ax = plt_pie(data, kind='donut', title='Donut Distribution')
+        >>> plt.show()
+
+        >>> data_list = ['A', 'B', 'A', 'C', 'B', 'B']
+        >>> fig, ax = plt_pie(data_list, kind='pie', label_place='int')
+        >>> plt.show()
+    """
     
-    # Build graphs size, and fonts size from scale
-    if scale < 1 or scale > 6:
+    # Validate data parameter
+    if not isinstance(data, (pd.Series, pd.DataFrame)):     # pd.Series or pd.Datafram
+        raise TypeError(
+            f"Input data must be a pandas Series or DataFrame. Got {type(data)} instead."
+        )
+
+    if isinstance(data, pd.DataFrame):                      # Only one-column df
+        if data.shape[1] != 1:
+            raise ValueError(
+                f"DataFrame must have exactly one column. Got {data.shape[1]} columns."
+            )
+        else:                                               # One-clolumn df to Serie
+            data = data.iloc[:, 0]
+
+    if not all(                                             # Only positve numeric values                 
+        isinstance(val, (int, float, np.integer, np.floating)) and val > 0 for val in data.values
+    ):
+        raise ValueError(f"All values in 'data' must be positive numeric values.")
+    
+    # Validate kind parameter
+    if kind.lower() not in ['pie', 'donut']:
+        raise ValueError(f"Invalid 'kind' parameter: '{kind}'. Must be 'pie' or 'donut'.")
+    
+    # Validate maximum categories
+    if len(data) > 9:
+        raise ValueError(f"Data contains {len(data)} categories. "
+                        "Maximum allowed is 9 categories.")
+    
+    # Build graphs size, and fonts size from scale, and validate scale from 1 to 6.
+    if scale < 1 or scale > 9:
         raise ValueError(f"[ERROR] Invalid 'scale' value. Must between '1' and '6', not '{scale}'.")
     else:
         scale = round(scale)
@@ -287,9 +369,7 @@ def plt_pie(
     title_size = label_size * 1.25
 
     # Base fig definitions
-    if not figsize:
-        figsize = (width, high)
-
+    figsize = (width, high)
     fig, ax = plt.subplots(figsize=figsize, subplot_kw=dict(aspect="equal"))
 
     # Configure wedge properties for donut  or pie chart
@@ -300,345 +380,77 @@ def plt_pie(
         wedgeprops = {'edgecolor': 'white', 'linewidth': 0.5}
 
     # Define colors
-    color_palette = get_colors(palette)
+    color_palette = get_colors_list(palette, len(data))
 
-    wedges, texts = ax.pie(data, wedgeprops=wedgeprops, colors=color_palette, startangle=-40)
+    if label_place == 'ext':
 
-    bbox_props = dict(boxstyle="square,pad=0.3", fc="w", ec="k", lw=0.72)
-    kw = dict(arrowprops=dict(arrowstyle="-"), bbox=bbox_props, zorder=0, va="center")
+        wedges, texts = ax.pie(data, wedgeprops=wedgeprops, colors=color_palette, startangle=startangle)
 
-    # Build the labels. 1st. sum to pcts calc. 
-    labels = [
-        f"{data.loc[data == value].index[0]}\n{value}\n({round(value / data.sum(), pct_decimals)} %)"
-        for value in data.values
-    ]
-    
-    for i, p in enumerate(wedges):
-        ang = (p.theta2 - p.theta1)/2. + p.theta1
-        y = np.sin(np.deg2rad(ang))
-        x = np.cos(np.deg2rad(ang))
-        horizontalalignment = {-1: "right", 1: "left"}[int(np.sign(x))]
-        connectionstyle = f"angle,angleA=0,angleB={ang}"
-        kw["arrowprops"].update({"connectionstyle": connectionstyle})
-        ax.annotate(labels[i], xy=(x, y), xytext=(1.35*np.sign(x), 1.4*y),
-                horizontalalignment=horizontalalignment, fontsize=label_size, **kw)
+        bbox_props = dict(boxstyle="square,pad=0.3", fc="w", ec="k", lw=0.72)
+        kw = dict(arrowprops=dict(arrowstyle="-"), bbox=bbox_props, zorder=0, va="center")
 
+        # Build the labels. Annotations and legend in same label (External)
+        labels = [
+            f"{data.loc[data == value].index[0]}\n{value}\n({round(value / data.sum() * 100, pct_decimals)} %)"
+            for value in data.values
+        ]
+        
+        # Draw the annotations (labels)
+        for i, p in enumerate(wedges):
+            ang = (p.theta2 - p.theta1)/2. + p.theta1
+            y = np.sin(np.deg2rad(ang))
+            x = np.cos(np.deg2rad(ang))
+            horizontalalignment = {-1: "right", 1: "left"}[int(np.sign(x))]
+            connectionstyle = f"angle,angleA=0,angleB={ang}"
+            kw["arrowprops"].update({"connectionstyle": connectionstyle})
+            ax.annotate(labels[i], xy=(x, y), xytext=(1.35*np.sign(x), 1.4*y),
+                    horizontalalignment=horizontalalignment, fontsize=label_size, **kw)
+            
+    elif label_place == 'int':
+        # I have to change the fontsize for internal annotations
+        label_size = label_size * 0.8
+        legend_size = label_size * 1.1
+
+        # autopct for internal annotations. A funtion to show both: absolute an pcts.
+        format_string = f'%.{pct_decimals}f%%'
+
+        def make_autopct(values, fmt_str):
+            value_iterator = iter(values)
+            
+            def my_autopct(pct):
+                absolute_value = next(value_iterator)
+                percentage_string = fmt_str % pct
+                return f"{absolute_value}\n({percentage_string})"  
+            
+            return my_autopct
+        
+        autopct_function = make_autopct(data.values, format_string)
+        
+        ax.pie(x=data,
+            colors=color_palette,
+            startangle=startangle,
+            autopct=autopct_function,
+            wedgeprops=wedgeprops,
+            textprops={'size': label_size,
+                        'color': 'w',
+                        'rotation': label_rotate,
+                        'weight': 'bold'})
+        
+        ax.legend(data.index,
+                loc=legend_loc,
+                bbox_to_anchor=(1, 0, 0.2, 1),
+                prop={'size': legend_size})
+
+    else:
+        raise ValueError(f"Invalid labe_place parameter. Must be 'ext' or 'int', not '{label_place}'.")
+            
     # Build title
     if not title:
-        title = f"Donut Chart - ({data.name})"
+        title = f"Pie/Donut Chart - ({data.name})"
    
-    ax.set_title(title, fontdict={'size': title_size})
-
-    return fig, ax
-
-
-def plt_pie_1(
-        data,
-        figsize = (6, 6),
-        palette = 'colorblind',
-        startangle = 0,
-        rotate = 0,
-        label_size = 15,
-        title = 'Pie Chart',
-        title_size = 20,
-        autopct = '%.2f%%',
-        legend_loc = 'best',
-        legend_size = 15,
-
-    ):
-    """
-    Create a pie chart from a specified column in a DataFrame.
-    
-    Parameters:
-    - data: df[col], pd.Series, list, tuple, or array-like object to create the pie chart from.
-    - title (str): Title of the pie chart.
-    - figsize (float, float): Size of the figure.
-    - autopct (str_format): Format for displaying percentages.
-    """
-
-    # Validate maximum categories
-    if len(data) > 9:
-        raise ValueError(f"Data contains {len(data)} categories. "
-                        "Maximum allowed is 9 categories.")
-
-    fig, ax = plt.subplots(figsize=figsize)
-
-    # Colors - colors_palette
-    if palette == 'colorblind':
-        colors_palette = get_colorblind_palette()
-    else:
-        cmap = plt.get_cmap(palette, len(data))                 # Use palette colormap
-        colors_palette = [cmap(i) for i in range(len(data))]    # Get colors from the colormap
-
-    # autopct
-    autopct_function = None
-
-    def make_autopct(values, format_string):                    # A closure: a function that return a new function
-        value_iterator = iter(values)                           # 1. Mk an iterator of the original values      
-        
-        def my_autopct(pct):
-            absolute_value = next(value_iterator)               # 2. Get next value from iterator
-            percentage_string = format_string % pct             # 3. Format percentage using autopct. El operador '%' aplica el formato al valor 'pct'.
-            return f"{absolute_value} ({percentage_string})"     
-        
-        return my_autopct
-    
-    autopct_function = make_autopct(data.values, autopct)
-    
-    ax.pie(x=data,
-           colors=colors_palette,
-           startangle=startangle,
-           autopct=autopct_function,
-           textprops={'size': label_size,
-                      'color': 'w',
-                      'rotation': rotate,
-                      'weight': 'bold'})
-
     ax.set_title(title, fontdict={'size': title_size, 'weight': 'bold'})
-    
-    ax.legend(data.index,
-              loc=legend_loc,
-              bbox_to_anchor=(1, 0, 0.2, 1),
-              prop={'size': legend_size})
 
     return fig, ax
-
-
-# Aux Funct. to Create external horizontal labels with connection lines.
-def _create_external_labels(
-    ax: plt.Axes, 
-    wedges: list, 
-    categories: list, 
-    values: np.ndarray, 
-    percentages: np.ndarray,
-    label_size: int
-) -> None:
-    """
-    Create external horizontal labels with connection lines.
-    
-    Parameters
-    ----------
-    ax : plt.Axes
-        Matplotlib axes object.
-    wedges : list
-        List of wedge objects from pie chart.
-    categories : list
-        List of category names.
-    values : np.ndarray
-        Array of frequency values.
-    percentages : np.ndarray
-        Array of percentage values.
-    """
-    # Calculate label positions
-    label_distance = 1.3
-    connection_distance = 1.15
-    
-    for i, (wedge, category, value, percentage) in enumerate(zip(wedges, categories, values, percentages)):
-        # Get the angle of the wedge center
-        angle = (wedge.theta1 + wedge.theta2) / 2
-        
-        # Convert angle to radians
-        angle_rad = np.radians(angle)
-        
-        # Calculate connection point on wedge edge
-        connection_x = connection_distance * np.cos(angle_rad)
-        connection_y = connection_distance * np.sin(angle_rad)
-        
-        # Calculate label position
-        label_x = label_distance * np.cos(angle_rad)
-        label_y = label_distance * np.sin(angle_rad)
-        
-        # Determine horizontal alignment based on position
-        ha = 'left' if label_x > 0 else 'right'
-        
-        # Adjust label position for better horizontal alignment
-        if ha == 'left':
-            label_x += 0.1
-        else:
-            label_x -= 0.1
-        
-        # Create label text
-        label_text = f'{category}\n{int(value)} ({percentage}%)'
-        
-        # Add connection line
-        ax.annotate('', xy=(connection_x, connection_y), xytext=(label_x, label_y),
-                   arrowprops=dict(arrowstyle='-', color='gray', lw=1, alpha=0.7))
-        
-        # Add label text
-        ax.text(label_x, label_y, label_text, 
-               horizontalalignment=ha, verticalalignment='center',
-               fontsize=label_size, fontweight='normal',
-               bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
-                        edgecolor='lightgray', alpha=0.8))
-
-
-def plt_pie_2(
-    data: Union[pd.Series, pd.DataFrame, dict, list],
-    kind: str = 'pie',
-    title: Optional[str] = None,
-    title_size: Optional[int] = 20,
-    label_size: Optional[int] = 15,
-    decimals: Optional[int] = 2,
-    figsize: Tuple[int, int] = (9, 7),
-    colors: Optional[list] = None,
-    startangle: float = 0,
-    explode: Optional[list] = None,
-    **kwargs
-) -> Tuple[plt.Figure, plt.Axes]:
-    """
-    Create a pie or donut chart with external horizontal labels.
-    
-    This function generates publication-ready categorical data visualizations with
-    external labels showing category names, frequencies, and percentages. Labels
-    are connected to their corresponding segments via connection lines.
-    
-    Parameters:
-    - data : Union[pd.Series, pd.DataFrame, dict, list] - Input categorical data. Can be:
-        - pd.Series with category names as index and values as frequencies
-        - pd.DataFrame with two columns (categories and values)
-        - dict with categories as keys and frequencies as values
-        - list of category names (frequencies will be counted)
-    
-    - kind : str, default 'pie' - Type of chart to create. Options:
-        - 'pie': Traditional pie chart
-        - 'donut': Donut chart with hollow center
-    
-    - title : str, optional
-        Chart title. If None, no title will be displayed.
-    
-    - figsize : Tuple[int, int],
-        Figure size in inches (width, height).
-    
-    - colors : list, optional
-        List of colors for chart segments. If None, uses matplotlib default colors.
-    
-    - startangle : float, default 90
-        Angle at which the first wedge starts (in degrees).
-    
-    - explode : list, optional
-        List of floats specifying how much to separate each wedge from center.
-        Must have same length as number of categories.
-    
-    **kwargs
-        Additional keyword arguments passed to matplotlib's pie function.
-    
-    Returns
-    -------
-    Tuple[plt.Figure, plt.Axes]
-        Matplotlib figure and axes objects for further customization.
-    
-    Raises
-    ------
-    ValueError
-        If data contains more than 8 categories, if 'kind' parameter is invalid,
-        if data is empty, or if explode list length doesn't match data length.
-    
-    TypeError
-        If data type is not supported.
-    
-    Examples
-    --------
-    >>> import pandas as pd
-    >>> data = pd.Series([25, 30, 20, 15, 10], 
-    ...                  index=['A', 'B', 'C', 'D', 'E'])
-    >>> fig, ax = create_categorical_chart(data, kind='pie', 
-    ...                                   title='Sales by Category')
-    >>> plt.show()
-    
-    >>> # Create donut chart with custom colors
-    >>> colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4']
-    >>> fig, ax = create_categorical_chart(data, kind='donut', 
-    ...                                   colors=colors)
-    >>> plt.show()
-    """
-    
-    # Validate and normalize input data, not empty, positive numbers, and sort for better visualization
-    processed_data = to_categorical_serie(data)
-    
-    if len(processed_data) == 0:
-        raise ValueError("Input data is empty.")
-    
-    if not all(isinstance(val, (np.integer, np.floating)) and val > 0 for val in processed_data.values):
-        raise ValueError("All data values must be positive numbers.")
-    
-    processed_data = processed_data.sort_values(ascending=False)
-    
-    # Validate kind parameter
-    if kind.lower() not in ['pie', 'donut']:
-        raise ValueError(f"Invalid 'kind' parameter: '{kind}'. Must be 'pie' or 'donut'.")
-    
-    # Validate maximum categories
-    if len(processed_data) > 9:
-        raise ValueError(f"Data contains {len(processed_data)} categories. "
-                        "Maximum allowed is 9 categories.")
-    
-    # Validate explode parameter
-    if explode is not None and len(explode) != len(processed_data):
-        raise ValueError(f"Length of 'explode' ({len(explode)}) must match "
-                        f"number of categories ({len(processed_data)}).")
-    
-    # Create figure and axis
-    fig, ax = plt.subplots(figsize=figsize)
-    
-    # Prepare data for plotting
-    categories = processed_data.index.tolist()
-    values = processed_data.values
-    total = values.sum()
-    percentages = (values / total * 100).round(decimals)
-    
-    # Set up colors
-    if colors is None:
-        colors = plt.cm.Set3(np.linspace(0, 1, len(categories)))
-    elif len(colors) < len(categories):
-        warnings.warn(f"Not enough colors provided ({len(colors)}). "
-                     f"Need {len(categories)} colors. Using default colors.")
-        colors = plt.cm.Set3(np.linspace(0, 1, len(categories)))
-    
-    # Configure wedge properties for donut chart
-    wedgeprops = {}
-    if kind.lower() == 'donut':
-        wedgeprops = {'width': 0.5, 'edgecolor': 'white', 'linewidth': 2}
-    else:
-        wedgeprops = {'edgecolor': 'white', 'linewidth': 1}
-
-    
-    # Create the pie/donut chart
-    wedges, texts, autotexts = ax.pie(
-        values,
-        labels=None,  # We'll create custom external labels
-        colors=colors,
-        startangle=startangle,
-        explode=explode,
-        wedgeprops=wedgeprops,
-        autopct='',  # We'll create custom percentage labels
-        pctdistance=0.85,
-        labeldistance=1.1,
-        **kwargs
-    )
-    
-    # Create external labels with connection lines
-    _create_external_labels(ax, wedges, categories, values, percentages, label_size)
-    
-    # Set title
-    if not title:
-        title = f"{kind.title()} Chart"
-        
-    ax.set_title(
-        title,
-        # loc='left',
-        fontdict={'size': title_size, 'weight': 'bold'},
-        x=0.0,                                      # Extremo derecho (1.0 = 100% del ancho del eje)
-        y=1.02,                                     # Ligeramente por encima del área del gráfico
-    )
-    
-    # Ensure equal aspect ratio for circular chart
-    ax.axis('equal')
-    
-    # Adjust layout to prevent label cutoff
-    plt.tight_layout()
-    
-    return fig, ax
-
 
 
 
