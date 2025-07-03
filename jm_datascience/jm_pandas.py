@@ -227,7 +227,112 @@ def get_colorblind_palette():
     ]
 
 
-def plt_piechart(
+def get_colors(palette):
+    '''
+    Return a valid matplotlib palette list
+    - 'colorbind', 'viridis', 'plasma', 'inferno', 'magma', 'cividis' <- daltonic
+    - 'Accent', 'Accent_r', 'Blues', 'Blues_r', 'BrBG', 'BrBG_r', 'BuGn', 'BuGn_r', 'BuPu', 'BuPu_r', 'CMRmap', 'CMRmap_r', 'Dark2', 'Dark2_r', 'GnBu', 'GnBu_r', 
+    'Grays', 'Grays_r', 'Greens', 'Greens_r', 'Greys', 'Greys_r', 'OrRd', 'OrRd_r', 'Oranges', 'Oranges_r', 'PRGn', 'PRGn_r', 'Paired', 'Paired_r', 'Pastel1', 
+    'Pastel1_r', 'Pastel2', 'Pastel2_r', 'PiYG', 'PiYG_r', 'PuBu', 'PuBuGn', 'PuBuGn_r', 'PuBu_r', 'PuOr', 'PuOr_r', 'PuRd', 'PuRd_r', 'Purples', 'Purples_r', 
+    'RdBu', 'RdBu_r', 'RdGy', 'RdGy_r', 'RdPu', 'RdPu_r', 'RdYlBu', 'RdYlBu_r', 'RdYlGn', 'RdYlGn_r', 'Reds', 'Reds_r', 'Set1', 'Set1_r', 'Set2', 'Set2_r', 'Set3', 
+    'Set3_r', 'Spectral', 'Spectral_r', 'Wistia', 'Wistia_r', 'YlGn', 'YlGnBu', 'YlGnBu_r', 'YlGn_r', 'YlOrBr', 'YlOrBr_r', 'YlOrRd', 'YlOrRd_r', 'afmhot', 
+    'afmhot_r', 'autumn', 'autumn_r', 'berlin', 'berlin_r', 'binary', 'binary_r', 'bone', 'bone_r', 'brg', 'brg_r', 'bwr', 'bwr_r', 'cividis', 'cividis_r', 
+    'cool', 'cool_r', 'coolwarm', 'coolwarm_r', 'copper', 'copper_r', 'cubehelix', 'cubehelix_r', 'flag', 'flag_r', 'gist_earth', 'gist_earth_r', 'gist_gray', 
+    'gist_gray_r', 'gist_grey', 'gist_grey_r', 'gist_heat', 'gist_heat_r', 'gist_ncar', 'gist_ncar_r', 'gist_rainbow', 'gist_rainbow_r', 'gist_stern', 'gist_stern_r',
+    'gist_yarg', 'gist_yarg_r', 'gist_yerg', 'gist_yerg_r', 'gnuplot', 'gnuplot2', 'gnuplot2_r', 'gnuplot_r', 'gray', 'gray_r', 'grey', 'grey_r', 'hot', 'hot_r', 
+    'hsv', 'hsv_r', 'inferno', 'inferno_r', 'jet', 'jet_r', 'magma', 'magma_r', 'managua', 'managua_r', 'nipy_spectral', 'nipy_spectral_r', 'ocean', 'ocean_r', 
+    'pink', 'pink_r', 'plasma', 'plasma_r', 'prism', 'prism_r', 'rainbow', 'rainbow_r', 'seismic', 'seismic_r', 'spring', 'spring_r', 'summer', 'summer_r', 
+    'tab10', 'tab10_r', 'tab20', 'tab20_r', 'tab20b', 'tab20b_r', 'tab20c', 'tab20c_r', 'terrain', 'terrain_r', 'turbo', 'turbo_r', 'twilight', 'twilight_r', 
+    'twilight_shifted', 'twilight_shifted_r', 'vanimo', 'vanimo_r', 'viridis', 'viridis_r', 'winter', 'winter_r'",
+    '''
+    if palette == 'colorblind':
+        colors_palette = get_colorblind_palette()
+    else:
+        cmap = plt.get_cmap(palette, 10)                 # Use palette colormap
+        colors_palette = [cmap(i) for i in range(10)]    # Get colors from the colormap
+
+    return colors_palette
+
+
+def is_valid_for_pie(data):
+    if len(data) > 9:
+        raise ValueError(f"Data contains {len(data)} categories. "
+                        "Maximum allowed is 9 categories.")
+
+
+def plt_pie(
+        data,
+        scale = 2,
+        kind = 'pie',
+        title = '',
+        palette = 'colorblind',
+        figsize = (),
+        pct_decimals = 2,
+        label_size = 0,
+        title_size = 0
+):
+    ''' Donut chart w/ external legend/label absolute/pct values '''
+
+    is_valid_for_pie(data)
+    
+    # Build graphs size, and fonts size from scale
+    if scale < 1 or scale > 6:
+        raise ValueError(f"[ERROR] Invalid 'scale' value. Must between '1' and '6', not '{scale}'.")
+    else:
+        scale = round(scale)
+
+    multiplier, w_base, h_base  = 1.33333334 ** scale, 4.45, 2.25
+    width, high= w_base * multiplier, h_base * multiplier
+    label_size = width * 1.25
+    title_size = label_size * 1.25
+
+    # Base fig definitions
+    if not figsize:
+        figsize = (width, high)
+
+    fig, ax = plt.subplots(figsize=figsize, subplot_kw=dict(aspect="equal"))
+
+    # Configure wedge properties for donut  or pie chart
+    wedgeprops = {}
+    if kind.lower() == 'donut':
+        wedgeprops = {'width': 0.54, 'edgecolor': 'white', 'linewidth': 1}
+    else:
+        wedgeprops = {'edgecolor': 'white', 'linewidth': 0.5}
+
+    # Define colors
+    color_palette = get_colors(palette)
+
+    wedges, texts = ax.pie(data, wedgeprops=wedgeprops, colors=color_palette, startangle=-40)
+
+    bbox_props = dict(boxstyle="square,pad=0.3", fc="w", ec="k", lw=0.72)
+    kw = dict(arrowprops=dict(arrowstyle="-"), bbox=bbox_props, zorder=0, va="center")
+
+    # Build the labels. 1st. sum to pcts calc. 
+    labels = [
+        f"{data.loc[data == value].index[0]}\n{value}\n({round(value / data.sum(), pct_decimals)} %)"
+        for value in data.values
+    ]
+    
+    for i, p in enumerate(wedges):
+        ang = (p.theta2 - p.theta1)/2. + p.theta1
+        y = np.sin(np.deg2rad(ang))
+        x = np.cos(np.deg2rad(ang))
+        horizontalalignment = {-1: "right", 1: "left"}[int(np.sign(x))]
+        connectionstyle = f"angle,angleA=0,angleB={ang}"
+        kw["arrowprops"].update({"connectionstyle": connectionstyle})
+        ax.annotate(labels[i], xy=(x, y), xytext=(1.35*np.sign(x), 1.4*y),
+                horizontalalignment=horizontalalignment, fontsize=label_size, **kw)
+
+    # Build title
+    if not title:
+        title = f"Donut Chart - ({data.name})"
+   
+    ax.set_title(title, fontdict={'size': title_size})
+
+    return fig, ax
+
+
+def plt_pie_1(
         data,
         figsize = (6, 6),
         palette = 'colorblind',
@@ -367,7 +472,7 @@ def _create_external_labels(
                         edgecolor='lightgray', alpha=0.8))
 
 
-def plt_piechart2(
+def plt_pie_2(
     data: Union[pd.Series, pd.DataFrame, dict, list],
     kind: str = 'pie',
     title: Optional[str] = None,
