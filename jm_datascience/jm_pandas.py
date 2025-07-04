@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 ## Claude - Qwen
 
 
-def fmt_value_for_pd(value, width=8, decimals=2, miles=','):
+def fmt_value_for_pd(value, width=8, decimals=2, miles=',') -> str:
     """
     Format a value (numeric or string) into a right-aligned string of fixed width.
 
@@ -49,6 +49,9 @@ def fmt_value_for_pd(value, width=8, decimals=2, miles=','):
         >>> format_value(9876, miles=None)
         '    9876.00'
     """
+    # Paralmeter Value validation <- vamos a tener que analizar este tema por si es un list , etc,,
+    # if not isinstance(value, (int, float, np.integer, np.floating)) or pd.api.types.is_any_real_numeric_dtype(value)
+
     if not isinstance(width, int) or width <= 0:
         raise ValueError(f"Width must be a positive integer. Not '{width}'")
     
@@ -57,7 +60,7 @@ def fmt_value_for_pd(value, width=8, decimals=2, miles=','):
     
     if miles not in [',', '_', None]:
         raise ValueError(f"Miles must be either ',', '_', or None. Not '{miles}")
-
+    
     try:
         num = float(value)                                  # Convert to float if possible
         if miles:
