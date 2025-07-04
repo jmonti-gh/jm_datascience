@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 ## Claude - Qwen
 
 
-def format_value(value, width=8, decimals=2, miles=','):
+def fmt_value_for_pd(value, width=8, decimals=2, miles=','):
     """
     Format a value (numeric or string) into a right-aligned string of fixed width.
 
@@ -69,67 +69,96 @@ def format_value(value, width=8, decimals=2, miles=','):
         return str(value).rjust(width)                      # Alinea también strings, para mantener la grilla
 
 
-def to_serie(data: Union[pd.Series, np.ndarray, dict, list, pd.DataFrame]) -> pd.Series:
-    '''
-    Convert df of one or two columns, or numpy-array, or list, or dict to pd.Serie.
+def to_serie_with_count(
+    data: Union[pd.Series, np.ndarray, dict, list, set, pd.DataFrame],
+    count: Optional[bool] = False
+) -> pd.Series:
+    """
+    Converts input data into a pandas Series, optionally returning value counts.
+
+    This function accepts various data types and converts them into a pandas Series.
+    If `count=True`, it returns the frequency count of the values in the resulting Series.
+
+    Parameters:
+        data (Union[pd.Series, np.ndarray, dict, list, set, pd.DataFrame]):
+            The input data to convert. Supported types include:
+            - pd.Series: returned as-is or counted if `count=True`.
+            - np.ndarray: flattened and converted to a Series.
+            - dict: keys become the index, values are used for data.
+            - list or set: converted directly to a Series.
+            - pd.DataFrame:
+                - 1 column: converted directly to a Series.
+                - 2 columns: first column becomes the index, second becomes the values.
+
+        count (bool or int, optional): Whether to return value counts instead of raw data.
+            If True or 1, returns frequencies of each value. Default is False.
+
+    Returns:
+        pd.Series: A pandas Series representing the input data. If `count=True`, returns
+            the value counts of the data.
+
+    Raises:
+        TypeError: If `data` is not one of the supported types.
+        ValueError: If `count` is not a boolean or integer 0/1.
+        ValueError: If DataFrame has more than 2 columns.
+
+    Examples:
+        >>> import pandas as pd
+        >>> to_serie_with_count([1, 2, 2, 3])
+        0    1
+        1    2
+        2    2
+        3    3
+        dtype: int64
+
+        >>> to_serie_with_count([1, 2, 2, 3], count=True)
+        2    2
+        1    1
+        3    1
+        dtype: int64
+
+        >>> df = pd.DataFrame({'Category': ['A', 'B', 'A'], 'Value': [10, 20, 30]})
+        >>> to_serie_with_count(df)
+        Category
+        A    10
+        B    20
+        A    30
+        Name: Value, dtype: int64
+    """
     
-    Param -> data: df of one or two columns, or numpy-array, or list, or dict to pd.Serie.
-    Returns: pd.Series
-    '''
-
-    if isinstance(data, pd.Series):                 # If serie is already a Series
-        pdserie = data                              # No conversion needed      
+    # Validate count parameter
+    if not isinstance(count, (bool, int)):
+        return TypeError(f"* count must be bool or int 0 or 1. Not '{type(data)}'.")
+    if isinstance(count, int) and count not in (0, 1):
+        return ValueError(f"* count as int must be 0 or 1. Not '{count}'.")
+    
+    if isinstance(data, pd.Series):                 # If serie is already a Series no converson needed
+        serie = data                                  
     elif isinstance(data, np.ndarray):              # If data is a NumPy array   
-        pdserie = pd.Series(data.flatten())
-    elif isinstance(data, dict):
-        pdserie = pd.Series(data)
-    elif isinstance(data, list):                    # If data is a list
-        pdserie = pd.Series(data)
+        serie = pd.Series(data.flatten())
+    elif isinstance(data, (dict, list)):
+        serie = pd.Series(data)
     elif isinstance(data, pd.DataFrame):
         if data.shape[1] == 1:                      # Also len(data.columns == 1)
-            pdserie = data.iloc[:, 0]                         
-        else:
-            raise ValueError("DataFrame must exactly have 1 column: Categories -> index")
-    else:
-        raise TypeError(f"Unsupported data type: {type(data)}. "
-                    "Supported types: pd.Series, np.ndarray, pd.DataFrame, dict, list")
-
-    return pdserie
-
-
-def to_categorical_serie(data: Union[pd.Series, np.ndarray, dict, list, pd.DataFrame]) -> pd.Series:
-    '''
-    Build a categorical (base of Freq. Dist. Table) of input
-    '''
-    if isinstance(data, pd.Series):                 # If serie is already a Series
-        cat_serie = data                            # No conversion needed      
-    elif isinstance(data, np.ndarray):              # If data is a NumPy array   
-        cat_serie = pd.Series(data.flatten()).value_counts()
-    elif isinstance(data, dict):
-        cat_serie = pd.Series(data)
-    elif isinstance(data, list):                    # If data is a list
-        cat_serie = pd.Series(data).value_counts()
-    ## OJO acá en DF hay que ver si los valores ya están agrupados 'freq. o count cols' o no !!
-    # tal vez un nuevo parametro como values='nat' (native) or 'freq' (frequency) para saber si tenemos que agrupar (value_couns())
-    # entonces haríamos una sola función to_serie()
-    elif isinstance(data, pd.DataFrame):
-        if data.shape[1] == 1:                      # Also len(data.columns == 1)
-            cat_serie = data.value_counts()         # Also cat_serie = serie.iloc[:, 0]
+            serie = data.iloc[:, 0]
         elif data.shape[1] == 2:                    # Index: first col, Data: 2nd Col
-            cat_serie = data.set_index(data.columns[0])[data.columns[1]]
+            serie = data.set_index(data.columns[0])[data.columns[1]]
         else:
             raise ValueError("DataFrame must have 1 oer 2 columns. Categories and values for 2 columns cases.")
     else:
         raise TypeError(f"Unsupported data type: {type(data)}. "
-                    "Supported types: pd.Series, np.ndarray, pd.DataFrame, dict, list")
+                    "Supported types: pd.Series, np.ndarray, pd.DataFrame, dict, list, and pd.DataFrame")
 
-    return cat_serie
+    if count:
+        return serie.value_counts()
+    else:
+        return serie
 
 
 def describeplus(data, decimals: int = 2) -> pd.DataFrame:
     ''' Descriptive sats of data'''
 
-    serie = to_serie(data)          # Convert data to a pandas Series
+    serie = to_serie_with_count(data)          # Convert data to a pandas Series
     
     # Calc valid values for numerical and categorical series
     non_null_count = serie.count()
@@ -196,7 +225,7 @@ def describeplus(data, decimals: int = 2) -> pd.DataFrame:
     
     if pd.api.types.is_numeric_dtype(serie):
         df['formatted'] = df[serie.name].apply(
-            lambda x: format_value(x, width=8, decimals=decimals))                      # Apply formatting to the stats values
+            lambda x: fmt_value_for_pd(x, width=8, decimals=decimals))                      # Apply formatting to the stats values
     
     return df
     
