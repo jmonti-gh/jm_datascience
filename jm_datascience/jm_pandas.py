@@ -158,7 +158,7 @@ def to_serie_with_count(
         return serie
 
 
-def describeplus(data, decimals: int = 2) -> pd.DataFrame:
+def describeplus(data, decimals=2, miles=',') -> pd.DataFrame:
     ''' Descriptive sats of data'''
 
     serie = to_serie_with_count(data)          # Convert data to a pandas Series
@@ -228,7 +228,7 @@ def describeplus(data, decimals: int = 2) -> pd.DataFrame:
     
     if pd.api.types.is_numeric_dtype(serie):
         df['formatted'] = df[serie.name].apply(
-            lambda x: fmt_value_for_pd(x, width=8, decimals=decimals))                      # Apply formatting to the stats values
+            lambda x: fmt_value_for_pd(x, width=8, decimals=decimals, miles=miles))      # Apply formatting to the stats values
     
     return df
     
