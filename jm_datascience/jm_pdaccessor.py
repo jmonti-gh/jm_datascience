@@ -32,6 +32,17 @@ __last_modified__ = "2025-06-15"
 # fix .infoplus() and .infomax() categorical (Gender example) n-unique() and value_counts()
 # refactor .generals()
 
+## Estoy un poco desordenado en las tareas por hacer en este módulo y en jm_pandas
+# el tema es que describeplus() me gustaría escribirlo como método - dual para series y para df - y no como función 
+# por otro lado describeplus hace un convert_dtypes() pero no es sificiente, por ahí revisemos los conver_dtypes jm....¡?
+# convert_dtypeplus() y convert_dtypemax()
+## OJO tengo que hacer convert_dtypes válido para DFs y para Series... !!
+
+## Otra coas, tengo jm_pd.fmt_values_for_pd() y tengo jm_prt.fmt_nums() - dado que el primero se usa solo en describe
+# si logro hacer dscribe un método ya no tendré más la function 'jm_pd.fmt_values_for_pd()' 
+
+
+
 ## Trabajar en describeplus (para Series y dfs)!?
 
 
@@ -435,7 +446,7 @@ class JMAccessor:
 # 1. tengo que determinar si una columna es predominantemente numérica
 # 2. En caso de ser numerica la convierto ?
     
-    def convert_dtypes_plus(self):
+    def convert_dtypesplus(self):
         '''
         Hace convert_dtypes() considerando columnas numericas con 'ruido o basura' de strings
         Y haciendo una segunda conversión a convert_dtypes para evitar falsos float
@@ -453,7 +464,7 @@ class JMAccessor:
         return df1
     
 
-    def convert_dtypes_max(self):
+    def convert_dtypesmax(self):
         '''
         Hace convert_dtypes() considerando columnas numericas con 'ruido o basura' de strings
         Y haciendo una segunda conversión a convert_dtypes para evitar falsos float

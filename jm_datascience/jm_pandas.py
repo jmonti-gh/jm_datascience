@@ -171,7 +171,7 @@ def describeplus(data, decimals=2, miles=',') -> pd.DataFrame:
     if len(serie) == non_null_count + null_count:
         total_count = len(serie)
     else:
-        total_count = -1            # Error !?
+        total_count = '[ERROR ¡?]'           # Error !?
     
     # Calc valid mode for any dtype
     modes = serie.mode()
