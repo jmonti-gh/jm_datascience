@@ -63,6 +63,8 @@ def fmt_value_for_pd(value, width=8, decimals=2, miles=',') -> str:
     
     try:
         num = float(value)                                  # Convert to float if possible
+        if num % 1 == 0:                                    # it its a total integer number
+            decimals = 0
         if miles:
             return f"{num:>{width}{miles}.{decimals}f}"     # Ancho fijo, x decimales, alineado a la derecha
         else:

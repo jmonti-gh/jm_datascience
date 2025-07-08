@@ -27,6 +27,10 @@ __python_requires__ = ">=3.11"
 __last_modified__ = "2025-06-15"
 
 
+# jm.convert_dtypes.... DONE
+#   - generals or profile almost the same and info_summary??? 
+#   - infos just print directly w/some resume previous view native info()
+
 ## TO-DO: SERIES ?? .infoplus(), and infomax() valid for series too?
 # Info() e infomax() pueden hacerse que permitan trasponer filas por columns
 # fix .infoplus() and .infomax() categorical (Gender example) n-unique() and value_counts()
@@ -441,55 +445,121 @@ class JMAccessor:
         
     
 
-## Tengo algo grosso que hacer para poder calcular valores estadísticos en df reales (donde tengo columnas predonimantemente numericas que contienen NaNs y strings)
-# NO! lo primero puede ser hacer un convert_dtypes() - NOOO por ahora no cambia mucho en caso de datos mezclados
-# 1. tengo que determinar si una columna es predominantemente numérica
-# 2. En caso de ser numerica la convierto ?
-    
+    # "Extended convert_dtypes -convert_dtypesplus() and convert_dtypesmax()- <- _dtypeplus()
     def convert_dtypesplus(self):
-        '''
-        Hace convert_dtypes() considerando columnas numericas con 'ruido o basura' de strings
-        Y haciendo una segunda conversión a convert_dtypes para evitar falsos float
-        '''
-        df = self._obj.convert_dtypes()
+        """
+        Converts DataFrame columns or Series to appropriate dtypes, handling mixed (num and str) data.
 
-        for col in df.columns:
-            if pd.api.types.is_object_dtype(df[col]):
-                converted = pd.to_numeric(df[col], errors='coerce')      # 'coerce' replace errors (strings) to NaNs
-                numeric_ratio = converted.notna().sum() / len(df[col])   
-                if numeric_ratio >= 0.6:
-                    df[col] = converted
+        This method improves upon pandas' `convert_dtypes()` by:
+        - Handling object-dtyped columns that contain mostly numeric values with some strings.
+        - Performing a second conversion pass to ensure numeric types are optimized (e.g., Int64 instead of float).
 
-        df1 = df.convert_dtypes()
-        return df1
+        The method first applies `convert_dtypes()`, then checks each column:
+        - If it's object-typed, tries to convert to numeric and keeps the result if at least 60% are valid numbers.
+        - After each conversion round, re-applies `convert_dtypes()` to optimize types.
+
+        Returns:
+            pd.DataFrame or pd.Series: A new pandas_object with improved dtypes based on cleaned and rounded data.
+
+        Notes:
+            - Assumes access to `self._obj` as the original DataFrame or Series.
+            - Uses `Int64` dtype to preserve NaN support in integer columns.
+        """
+        # Here we just call the sub_function according to the pandas object type
+        if isinstance(self._obj, pd.DataFrame):
+            return self._df_convert_dtypesplus()
+        elif isinstance(self._obj, pd.Series):
+            return self._sr_convert_dtypesplus()
+        else:
+            raise ValueError(self._invalid_object_msg)
+        
+        
+    def _df_convert_dtypesplus(self):
+        df = self._obj.copy()
+
+        def _apply_func(col: pd.Series):
+            return col.jm._sr_convert_dtypesplus()
+
+        return df.apply(_apply_func)
+    
+    
+    def _sr_convert_dtypesplus(self):
+        sr = self._obj.convert_dtypes()
+
+        if pd.api.types.is_object_dtype(sr):
+            converted = pd.to_numeric(sr, errors='coerce')         # 'coerce' replace errors (strings) to NaNs
+            numeric_ratio = converted.notna().sum() / len(sr)   
+            if numeric_ratio >= 0.6:                               # if cant of numerics values > 60% of total IS NUMERIC
+                sr = converted
+
+        sr = sr.convert_dtypes()                                    # To avoid floats when all values are ints
+        return sr    
     
 
+    # "Extended convert_dtypes -convert_dtypesplus() and convert_dtypesmax()- <- _dtypemax()
     def convert_dtypesmax(self):
-        '''
-        Hace convert_dtypes() considerando columnas numericas con 'ruido o basura' de strings
-        Y haciendo una segunda conversión a convert_dtypes para evitar falsos float
-        Además redondeando los decimales para evitar ruido micronésimo (!= 0 muyy al final, en este caso 7 ceros)
-        '''
-        df = self._obj.convert_dtypes()
+        """
+        Converts DataFrame columns or Series to appropriate dtypes, handling mixed or noisy numeric data.
 
-        for col in df.columns:                          # Elimino el ruido (str) de cols y convierto a numérico 
-            if pd.api.types.is_object_dtype(df[col]):
-                converted = pd.to_numeric(df[col], errors='coerce')
-                numeric_ratio = converted.notna().sum() / len(df[col])
-                if numeric_ratio >= 0.6:
-                    df[col] = converted
-            df = df.convert_dtypes()                      # Para evitar floats cuando es mejor Int
+        Summary:
+        - convert_dtypesplus + handling noisy numeric data (miconesim values near 0, too small or too big decimal part)
+        - Most cases useful use of cnovert_dtypesmax() instead of plus..
 
-        for col in df.columns:                          # Para evitar basura micronésima
-            if pd.api.types.is_float_dtype(df[col]):
-                df[col] = df[col].apply(lambda x: round(x) if x % 1 > 0.99999 else x)
-                df[col] = df[col].convert_dtypes()
-                if df[col].apply(lambda x: True if x % 1 < 0.00001 or pd.isna(x) else False).all():
-                    df[col] = df[col].round(8).astype('Int64')
+        This method improves upon pandas' `convert_dtypes()` by:
+        - Handling object-dtyped columns that contain mostly numeric values with some strings.
+        - Performing a second conversion pass to ensure numeric types are optimized (e.g., Int64 instead of float).
+        - Rounding floating-point values to eliminate insignificant decimal noise.
+        - Optionally converting back to integer types when possible after rounding.
+
+        The method first applies `convert_dtypes()`, then checks each column:
+        - If it's object-typed, tries to convert to numeric and keeps the result if at least 60% are valid numbers.
+        - After each conversion round, re-applies `convert_dtypes()` to optimize types.
+
+        Additionally, for float columns, this method rounds small decimal residues (e.g., due to float imprecision)
+        and may convert such columns to integer types if all values are effectively whole numbers.
+
+        Returns:
+            pd.DataFrame: A new DataFrame with improved dtypes based on cleaned and rounded data.
+
+        Notes:
+            - Designed for internal use (leading underscore).
+            - Assumes access to `self._obj` as the original DataFrame.
+            - Uses `Int64` dtype to preserve NaN support in integer columns.
+        """
+        # Here we just call the sub_function according to the pandas object type
+        if isinstance(self._obj, pd.DataFrame):
+            return self._df_convert_dtypesmax()
+        elif isinstance(self._obj, pd.Series):
+            return self._sr_convert_dtypesmax()
+        else:
+            raise ValueError(self._invalid_object_msg)
+        
+
+    def _df_convert_dtypesmax(self):
+        # ._convert_dtypeplus() + micron noise control
+        df = self._obj.copy()
+
+        def _apply_func(col: pd.Series):
+            return col.jm._sr_convert_dtypesmax()
+                        
+        return df.apply(_apply_func)
+    
+
+    def _sr_convert_dtypesmax(self):
+        # ._convert_dtypeplus() + micron noise control
+        sr = self._obj.jm.convert_dtypesplus()
+
+        if pd.api.types.is_float_dtype(sr):
+            sr = sr.apply(lambda x: round(x) if x % 1 > 0.999999 else x)
+            sr = sr.convert_dtypes()      # Eliminate bad nans
+            if sr.apply(lambda x: True if x % 1 < 0.000001 or pd.isna(x) else False).all():
+                sr = sr.round(8).astype('Int64')
+
+        sr = sr.convert_dtypes()                                    # To avoid floats in case all ints.
+        return sr    
 
 
-        df = df.convert_dtypes()
-        return df
+
 
 
     # def infomax(self):
@@ -542,7 +612,21 @@ class JMAccessor:
 # in a future version. Use isinstance(dtype, CategoricalDtype) instead self._obj[col].nunique() if 
 # pd.api.types.is_categorical_dtype(self._obj[col]) or
 
+    # "Extended info() -infoplus() and infomax()- <- infoplus()
     def infoplus(self):
+        """
+
+        """
+        # Here we just call the sub_function according to the pandas object type
+        if isinstance(self._obj, pd.DataFrame):
+            return self._df_infoplus()
+        elif isinstance(self._obj, pd.Series):
+            return self._sr_infoplus()
+        else:
+            raise ValueError(self._invalid_object_msg)    
+    
+
+    def _df_infoplus(self):
         info = {
                 'Column': self._obj.columns,
                 'Dtype': self._obj.dtypes.values,
@@ -559,6 +643,10 @@ class JMAccessor:
         # self._obj_info = pd.DataFrame(info)
         # self._obj_info.index = pd.RangeIndex(start=0, stop=len(self._obj_info), step=1)
         # return self._obj_info
+        
+
+    def _sr_infoplus(self):
+        pass
     
 
     def info_cmp(self, df2, format='alt'):
