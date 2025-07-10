@@ -3,7 +3,12 @@ jm_pandas
 """
 
 ## TO-DO
-# paretto chart calc cumulative % or pass as argument .....
+# paretto chart calc cumulative % or pass as argument ..... make an fdt function..
+
+## OJO con la doble función de formateo de datos que tengo... OJO
+# porque debería ajustar tanto esta que tengo acá com la de jm_rchprt o DEJAR SOLO UNA!!!???
+# NO SE si conviene hacer dos porque en el caso de series tengo que considerar que NO es bueno mezclar n decimal con 0 decimals en una MISMA Series
+# caso del cumulative relative frequency
 
 __version__ = "0.1.0"
 __description__ = "Custom pandas functions for data cleaning and manipulation."
@@ -25,8 +30,8 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import PercentFormatter  # for pareto chart and ?
 ## Claude - Qwen
 
-
-def fmt_value_for_pd(value, width=8, decimals=2, miles=',') -> str:
+# An auxiliar function to change num format - OJO se puede hacer más amplia como jm_utils.jm_rchprt.fmt...
+def _fmt_value_for_pd(value, width=8, decimals=2, miles=',') -> str:
     """
     Format a value (numeric or string) into a right-aligned string of fixed width.
 
@@ -79,8 +84,8 @@ def fmt_value_for_pd(value, width=8, decimals=2, miles=',') -> str:
 
 
 def to_serie_with_count(
-    data: Union[pd.Series, np.ndarray, dict, list, set, pd.DataFrame],
-    count: Optional[bool] = False
+    data: Union[pd.Series, np.ndarray, dict, list, pd.DataFrame],
+    must_count: Optional[bool] = False
 ) -> pd.Series:
     """
     Converts input data into a pandas Series, optionally returning value counts.
@@ -136,10 +141,10 @@ def to_serie_with_count(
     """
     
     # Validate count parameter
-    if not isinstance(count, (bool, int)):
+    if not isinstance(must_count, (bool, int)):
         return TypeError(f"* count must be bool or int 0 or 1. Not '{type(data)}'.")
-    if isinstance(count, int) and count not in (0, 1):
-        return ValueError(f"* count as int must be 0 or 1. Not '{count}'.")
+    if isinstance(must_count, int) and must_count not in (0, 1):
+        return ValueError(f"* count as int must be 0 or 1. Not '{must_count}'.")
     
     if isinstance(data, pd.Series):                 # If series is already a Series no conversion needed
         serie = data                                  
@@ -158,10 +163,47 @@ def to_serie_with_count(
         raise TypeError(f"Unsupported data type: {type(data)}. "
                     "Supported types: pd.Series, np.ndarray, pd.DataFrame, dict, list, and pd.DataFrame")
 
-    if count:
+    if must_count:
         return serie.value_counts()
     else:
         return serie
+
+
+# Create a complete frecuency distribution table fron a categorical data
+def get_fdt(
+        data: Union[pd.Series, np.ndarray, dict, list, pd.DataFrame],
+        must_count: Optional[bool] = False,
+        pcts: Optional[bool] = True,
+        sort: Optional[str] = None,
+        plain_relatives: Optional[bool] = False,
+        fmt_values: Optional[bool] = False,
+) -> pd.DataFrame:
+    '''
+    OJO, continuar con estos detalles
+    sort: None, 'asc', 'desc', 'ix_asc', 'ix_des' para como queremos que sea vea el orden por valores o por indice
+    
+    
+    '''
+
+
+    fdt = pd.DataFrame(to_serie_with_count(data, must_count=must_count))
+    fdt.columns = ['Frequency']
+    fdt['Cumulative Frequency'] = fdt['Frequency'].cumsum()
+    fdt['Relative Freq. [%]'] = fdt['Frequency'] / fdt['Frequency'].sum() * 100
+    fdt['Cumulative Freq. [%]'] = fdt['Relative Freq. [%]'].cumsum()
+
+    if fmt_values:
+        fdt = fdt.map(_fmt_value_for_pd)
+
+    return fdt
+
+
+
+
+# state_fdt_us = pd.DataFrame(df['State'].value_counts())
+# state_fdt_us['Relative Freq. US-only [%]'] = state_fdt_us['count'] / state_fdt_us['count'].sum() * 100
+# state_fdt_us['Cumulative Freq. US-only [%]'] = state_fdt_us['Relative Freq. US-only [%]'].cumsum()
+# state_fdt_us
 
 
 def describeplus(data, decimals=2, miles=',') -> pd.DataFrame:
@@ -234,7 +276,7 @@ def describeplus(data, decimals=2, miles=',') -> pd.DataFrame:
     
     if pd.api.types.is_numeric_dtype(serie):
         df['formatted'] = df[serie.name].apply(
-            lambda x: fmt_value_for_pd(x, width=8, decimals=decimals, miles=miles))      # Apply formatting to the stats values
+            lambda x: _fmt_value_for_pd(x, width=8, decimals=decimals, miles=miles))      # Apply formatting to the stats values
     
     return df
     
