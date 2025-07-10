@@ -28,7 +28,16 @@ except FileNotFoundError:
 df_xls = pd.read_excel(spreedsheet, skiprows=4, usecols='B:J,L:AA', index_col='ID')
 df = df_xls.copy()
 
-# df_work.info()
-print(df_work.jm.infoplus())
+# df_work.info(memory_usage='deep')
+# df_work.jm.infoplus()
+df_work.jm.infoplus()
+print()
+df_work['nombre'].jm.infoplus()
+print()
+df_work['salario'].jm.infoplus()
+print()
+df_work['apellido'].jm.infoplus()
+
+
 
 # print(df_xls)

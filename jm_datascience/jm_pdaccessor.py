@@ -28,8 +28,13 @@ __last_modified__ = "2025-06-15"
 
 
 # jm.convert_dtypes.... DONE
-#   - generals or profile almost the same and info_summary??? 
+#   - generals or profile almost the same and info_summary??? - FUTURE
 #   - infos just print directly w/some resume previous view native info()
+#       - infobase() for base of infoplus and info_cmp() - DONE
+#       - infoplus for Series and DF - DONE - Future add more info like shape, size, etc...
+#       - info_cmp(df) only for DF in base of infobase - FUTURE for series.
+#       - infomax(df) OK for DF - FUTURE for series (infomax vs describe!?)
+#       - generals vs profile vs infoplus vs infomax .... FUTURE
 
 ## TO-DO: SERIES ?? .infoplus(), and infomax() valid for series too?
 # Info() e infomax() pueden hacerse que permitan trasponer filas por columns
@@ -45,9 +50,12 @@ __last_modified__ = "2025-06-15"
 ## Otra coas, tengo jm_pd.fmt_values_for_pd() y tengo jm_prt.fmt_nums() - dado que el primero se usa solo en describe
 # si logro hacer dscribe un método ya no tendré más la function 'jm_pd.fmt_values_for_pd()' 
 
-
-
 ## Trabajar en describeplus (para Series y dfs)!?
+
+## CHARTs jm_pandas
+#   - plt_pie() DONE
+#   - plt_parteto
+
 
 
 # Standard Libs
@@ -60,12 +68,50 @@ from typing import Any, Optional, Union
 ## qwen - claude
 
 
+## Aux function to set unit of memory data
+def to_bytes_multiplier(value, decimals=1):
+
+    if value < 0:
+        return '0 bytes'
+
+    units = ['bytes', 'KB', 'GB', 'TB', 'PB']
+    unit_ix = 0
+
+    while value >= 1024 and unit_ix < len(units) - 1:
+        value /= 1024
+        unit_ix += 1
+
+    if unit_ix == 0:
+        decimals = 0
+    
+    return f"{value:.{decimals}f} {units[unit_ix]}"
+
+
 class JMAccessor:
     def __init__(self, pandas_obj):
         self._obj = pandas_obj
         self._invalid_object_msg = (
             f"\n [ERROR] - Invalid object: {self._obj} - {type(self._obj)} \n "
         )
+
+    
+    ## Aux method to set unit of memory data
+    def _to_bytes_mult(value, decimals=1):
+
+        if value < 0:
+            return '0 bytes'
+
+        units = ['bytes', 'KB', 'GB', 'TB', 'PB']
+        unit_ix = 0
+
+        while value >= 1024 and unit_ix < len(units) - 1:
+            value /= 1024
+            unit_ix += 1
+
+        if unit_ix == 0:
+            decimals = 0
+        
+        return f"{value:.{decimals}f} {units[unit_ix]}"
 
 
     ## """Información extendida del objeto pandas"""
@@ -612,7 +658,7 @@ class JMAccessor:
 # in a future version. Use isinstance(dtype, CategoricalDtype) instead self._obj[col].nunique() if 
 # pd.api.types.is_categorical_dtype(self._obj[col]) or
 
-    # "Extended info() -infoplus() and infomax()- <- infoplus()
+    ## Extended info() -infoplus() and infomax()- <- infoplus()
     def infoplus(self):
         """
 
@@ -623,32 +669,86 @@ class JMAccessor:
         elif isinstance(self._obj, pd.Series):
             return self._sr_infoplus()
         else:
-            raise ValueError(self._invalid_object_msg)    
+            raise ValueError(self._invalid_object_msg)
+        
+    # _infobase() - Base para infoplus() e info_cmp()
+    def _df_infobase(self):
+        """Return basic information about DataFrame columns in a structured format.
+    
+        Returns a DataFrame with column-wise information including data type,
+        null/non-null counts, unique values count, and duplicate detection.
+        
+        Returns:
+            pd.DataFrame. A DataFrame with columns:
+            - Column: column names
+            - Dtype: data types
+            - N-Nulls: number of null values
+            - N-Non-Nulls: number of non-null values
+            - N-Uniques: number of unique values (excluding NaN)
+            - Has-Duplicates: whether column has duplicate values
+        """
+        info = {
+            'Column': self._obj.columns,
+            'Dtype': self._obj.dtypes.values,
+            'N-Nulls': self._obj.isnull().sum().values,
+            'N-Non-Nulls': self._obj.count().values,
+            'N-Uniques': [self._obj[col].nunique(dropna=True) for col in self._obj.columns],
+            'Has-Duplicates': [
+                self._obj[col].duplicated().any()
+                for col in self._obj.columns
+            ],
+        }
+        return(pd.DataFrame(info))
     
 
-    def _df_infoplus(self):
+    def _sr_infobase(self):
+        """Return basic information about a Series in a structured format.
+        
+        Returns a DataFrame with a single row containing information about the 
+        Series including name, data type, null/non-null counts, unique values 
+        count, and duplicate detection.
+        
+        Returns:
+            pd.DataFrame. A DataFrame with one row containing:
+            - Name: series name (or 'Series' if unnamed)
+            - Dtype: data type
+            - N-Nulls: number of null values
+            - N-Non-Nulls: number of non-null values
+            - N-Uniques: number of unique values (excluding NaN)
+            - Has-Duplicates: whether series has duplicate values
+        """
         info = {
-                'Column': self._obj.columns,
-                'Dtype': self._obj.dtypes.values,
-                'N-Nulls': self._obj.isnull().sum().values,
-                'N-Total': self._obj.count().values,
-                'N-Uniques': [self._obj[col].nunique(dropna=True) for col in self._obj.columns],
-                'Has-Duplicates': [
-                    self._obj[col].duplicated().any()
-                    for col in self._obj.columns
-                ],
-            }
+            'Name': [self._obj.name if self._obj.name is not None else 'Series'],
+            'Dtype': [self._obj.dtype],
+            'N-Nulls': [self._obj.isnull().sum()],
+            'N-Non-Nulls': [self._obj.count()],
+            'N-Uniques': [self._obj.nunique(dropna=True)],
+            'Has-Duplicates': [self._obj.duplicated().any()],
+        }
         return pd.DataFrame(info)
+    
+    
+    def _df_infoplus(self):
+        ''' infobase() plus similar to .info() presentation data'''
+        df = self._df_infobase()
 
-        # self._obj_info = pd.DataFrame(info)
-        # self._obj_info.index = pd.RangeIndex(start=0, stop=len(self._obj_info), step=1)
-        # return self._obj_info
+        print(f"{type(self._obj)} | {self._obj.index}")
+        print(f"Data columns (total {len(self._obj.columns)} columns):")
+        print('-' * 32)
+        print(df)
+        print(f"memory usage: {to_bytes_multiplier(self._obj.memory_usage(deep=True).sum())}")
         
 
     def _sr_infoplus(self):
-        pass
+        ''' infobase() plus similar to .info() presentation data'''
+        sr = self._sr_infobase()
+
+        print(f"{type(self._obj)} | {self._obj.index}")
+        print(sr)
+        print(f"memory usage: {to_bytes_multiplier(self._obj.memory_usage(deep=True))}")
     
 
+    ## info_cmp(obj1, obj2) - Show data of columns of two pandas objects
     def info_cmp(self, df2, format='alt'):
         '''
         Compara la información básica (similar a df.info()) de dos DataFrames.
@@ -666,9 +766,9 @@ class JMAccessor:
         df1_nm = 'df1'
         df2_nm = 'df2'
 
-        # Get dfs.infoplus()
-        df1_info = self.infoplus()
-        df2_info = df2.jm.infoplus()
+        # Get dfs.infobase()
+        df1_info = self._df_infobase()
+        df2_info = df2.jm._df_infobase()
 
         # Renombrar columnas para diferenciar
         df1_info = df1_info.rename(columns={col: f'{col}_{df1_nm}' for col in df1_info.columns if col != 'Column'})

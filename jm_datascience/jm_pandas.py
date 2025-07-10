@@ -2,6 +2,9 @@
 jm_pandas
 """
 
+## TO-DO
+# paretto chart calc cumulative % or pass as argument .....
+
 __version__ = "0.1.0"
 __description__ = "Custom pandas functions for data cleaning and manipulation."
 __author__ = "Jorge Monti"
@@ -19,6 +22,7 @@ from typing import Union, Optional, Any
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.ticker import PercentFormatter  # for pareto chart and ?
 ## Claude - Qwen
 
 
@@ -137,7 +141,7 @@ def to_serie_with_count(
     if isinstance(count, int) and count not in (0, 1):
         return ValueError(f"* count as int must be 0 or 1. Not '{count}'.")
     
-    if isinstance(data, pd.Series):                 # If serie is already a Series no converson needed
+    if isinstance(data, pd.Series):                 # If series is already a Series no conversion needed
         serie = data                                  
     elif isinstance(data, np.ndarray):              # If data is a NumPy array   
         serie = pd.Series(data.flatten())
@@ -312,6 +316,29 @@ def get_colors_list(palette: str, n: Optional[int] = 10) -> list[str]:
     return colors_list
 
 
+def _validate_categorical_parameters(
+        data: Union[pd.Series, pd.DataFrame],
+        positive: Optional[bool] = True
+) -> Union[None, Exception]:
+
+    # Validate data parameter a pandas object
+    if not isinstance(data, (pd.Series, pd.DataFrame)):     # pd.Series or pd.Datafram
+        raise TypeError(
+            f"Input data must be a pandas Series or DataFrame. Got {type(data)} instead."
+        )
+              
+    if positive:
+        if not all(                                             # Only positve numeric values                 
+            isinstance(val, (int, float, np.integer, np.floating)) and val > 0 for val in data.values
+        ):
+            raise ValueError(f"All values in 'data' must be positive numeric values.")
+        pass
+    else:                                                       # Just only numeric values
+        if not all(isinstance(val, (int, float, np.integer, np.floating)) for val in data.values):
+            raise ValueError(f"All values in 'data' must be numeric values.")
+        pass
+
+
 def plt_pie(
     data: Union[pd.Series, pd.DataFrame],
     scale: Optional[int] = 2,
@@ -362,25 +389,11 @@ def plt_pie(
         >>> fig, ax = plt_pie(data_list, kind='pie', label_place='int')
         >>> plt.show()
     """
-    
-    # Validate data parameter
-    if not isinstance(data, (pd.Series, pd.DataFrame)):     # pd.Series or pd.Datafram
-        raise TypeError(
-            f"Input data must be a pandas Series or DataFrame. Got {type(data)} instead."
-        )
+    # Convert to serie en case of DF
+    if isinstance(data, pd.DataFrame):
+        data = to_serie_with_count(data)
 
-    if isinstance(data, pd.DataFrame):                      # Only one-column df
-        if data.shape[1] != 1:
-            raise ValueError(
-                f"DataFrame must have exactly one column. Got {data.shape[1]} columns."
-            )
-        else:                                               # One-clolumn df to Serie
-            data = data.iloc[:, 0]
-
-    if not all(                                             # Only positve numeric values                 
-        isinstance(val, (int, float, np.integer, np.floating)) and val > 0 for val in data.values
-    ):
-        raise ValueError(f"All values in 'data' must be positive numeric values.")
+    _validate_categorical_parameters(data)
     
     # Validate kind parameter
     if kind.lower() not in ['pie', 'donut']:
@@ -481,10 +494,103 @@ def plt_pie(
     # Build title
     if not title:
         title = f"Pie/Donut Chart - ({data.name})"
-   
     ax.set_title(title, fontdict={'size': title_size, 'weight': 'bold'})
 
     return fig, ax
+
+
+def plt_paretto(
+    data: Union[pd.Series, pd.DataFrame],
+    scale: Optional[int] = 2,
+    title: Optional[str] = None,
+    palette: Optional[list] = 'colorblind',
+    color1: Optional[str] = 'midnightblue',
+    color2: Optional[str] = 'darkorange',
+    line_size = 4,
+    kind: Optional[str] = 'pie',
+    label_place: Optional[str] = 'ext',
+    startangle: Optional[float] = -40,
+    pct_decimals: Optional[int] = 2,
+    label_rotate: Optional[float] = 0,
+    legend_loc: Optional[str] = 'best'
+) -> tuple[plt.Figure, plt.Axes]:
+
+    # Convert to serie en case of DF
+    if isinstance(data, pd.DataFrame):
+        data = to_serie_with_count(data)
+
+    _validate_categorical_parameters(data)
+    
+    # # Validate kind parameter
+    # if kind.lower() not in ['pie', 'donut']:
+    #     raise ValueError(f"Invalid 'kind' parameter: '{kind}'. Must be 'pie' or 'donut'.")
+    
+    # # Validate maximum categories
+    # if len(data) > 9:
+    #     raise ValueError(f"Data contains {len(data)} categories. "
+    #                     "Maximum allowed is 9 categories.")
+    
+    # Build graphs size, and fonts size from scale, and validate scale from 1 to 6.
+    if scale < 1 or scale > 9:
+        raise ValueError(f"[ERROR] Invalid 'scale' value. Must between '1' and '6', not '{scale}'.")
+    else:
+        scale = round(scale)
+
+    multiplier, w_base, h_base  = 1.33333334 ** scale, 4.45, 2.25
+    width, high= w_base * multiplier, h_base * multiplier
+    label_size = width * 1.25
+    title_size = label_size * 1.25
+
+    # define aesthetics for plot - color1 and 2 plus line_size
+
+    # Base fig definitions - create basic bar plot
+    fig, ax = plt.subplots(figsize=(width, high), subplot_kw=dict(aspect="equal"))
+    bplot = ax.bar(data.index, data.values, color=color1)
+
+    # Add bar labels
+    ax.bar_label(bplot,
+                fontweight='bold',
+                color=color1,
+                padding=4)
+
+    # add cumulative percentage line to plot
+    ax2 = ax.twinx()        # create another y-axis sharing a common x-axis
+    percentage_lim = 100
+    ax2.set_ylim(0, percentage_lim)     # make the secondary y scale from 0 to 100
+
+    ax2.plot(state_fdt_us.index,
+            state_fdt_us['Cumulative Freq. US-only [%]'],
+            color=color2,
+            marker="D",
+            ms=line_size)
+
+    ax2.yaxis.set_major_formatter(PercentFormatter())
+
+    # Add maeker labels (in percentage) 
+    formatted_weights = [f'{x:.0f}%' for x in state_fdt_us['Cumulative Freq. US-only [%]']]  
+    for i, txt in enumerate(formatted_weights):
+            ax2.annotate(txt,
+                        (state_fdt_us.index[i], state_fdt_us['Cumulative Freq. US-only [%]'].iloc[i] - 6),
+                        color='orange')    
+
+    # specify axis colors and x-axis rotation
+    ax.tick_params(axis='y', colors=color1)
+    ax.tick_params(axis='x', rotation=45)
+    ax2.tick_params(axis='y', colors=color2)
+
+    # https://matplotlib.org/stable/gallery/subplots_axes_and_figures/axes_margins.html#sphx-glr-gallery-subplots-axes-and-figures-axes-margins-py
+    # ax.margins(y=0.1)
+    # ax2.use_sticky_edges = False          # DO NOT work
+    # ax2.margins(0.3)                      # DO NOT work
+
+    # https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.set_ylim.html#matplotlib.axes.Axes.set_ylim
+    ax.set_ylim(0, state_fdt_us['count'].iloc[0] * 1.2 )
+    ax2.set_ylim(0, percentage_lim * 1.1)
+
+    #display Pareto chart
+    plt.show()
+
+
 
 
 
