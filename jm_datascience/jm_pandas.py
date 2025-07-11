@@ -9,6 +9,13 @@ jm_pandas
 # Considerar la opción de adicionar los nulls-nans-pd.NAs opcionalmente a la fdt
 # EN REALIDAD el tema de los nans lo tengo que ver en el to_series_with_count()
 
+## Pareto - proportional sizes
+#   title - qué - size - etc
+#   labels, legends, numbers, line size  - size!!
+
+## Pie
+#   Versión con TODO EXTERNO
+
 ## OJO con la doble función de formateo de datos que tengo... OJO
 # porque debería ajustar tanto esta que tengo acá com la de jm_rchprt o DEJAR SOLO UNA!!!???
 # NO SE si conviene hacer dos porque en el caso de series tengo que considerar que NO es bueno mezclar n decimal con 0 decimals en una MISMA Series
@@ -580,7 +587,11 @@ def plt_pareto(
     if isinstance(data, pd.DataFrame):
         data = to_serie_with_count(data)
 
-    # _validate_categorical_parameters(data)
+    # Validate data parameter a pandas object
+    if not isinstance(data, (pd.Series, pd.DataFrame)):     # pd.Series or pd.Datafram
+        raise TypeError(
+            f"Input data must be a pandas Series or DataFrame. Got {type(data)} instead."
+        )
     
     # # Validate kind parameter
     # if kind.lower() not in ['pie', 'donut']:
@@ -608,8 +619,8 @@ def plt_pareto(
     # define aesthetics for plot - color1 and 2 plus line_size
 
     # Base fig definitions - create basic bar plot
-    fig, ax = plt.subplots(figsize=(width, high), subplot_kw=dict(aspect="equal"))
-    bplot = ax.bar(fdt.index, fdt['Frecuency'], color=color1)
+    fig, ax = plt.subplots(figsize=(width, high), tight_layout=True)
+    bplot = ax.bar(fdt.index, fdt['Frequency'], color=color1)
 
     # Add bar labels
     ax.bar_label(bplot,
@@ -622,8 +633,8 @@ def plt_pareto(
     percentage_lim = 100
     ax2.set_ylim(0, percentage_lim)     # make the secondary y scale from 0 to 100
 
-    ax2.plot(data.index,
-            data['Cumulative Freq. [%]'],
+    ax2.plot(fdt.index,
+            fdt['Cumulative Freq. [%]'],
             color=color2,
             marker="D",
             ms=line_size)
@@ -648,7 +659,7 @@ def plt_pareto(
     # ax2.margins(0.3)                      # DO NOT work
 
     # https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.set_ylim.html#matplotlib.axes.Axes.set_ylim
-    ax.set_ylim(0, fdt['Frecuency'].iloc[0] * 1.2 )
+    ax.set_ylim(0, fdt['Frequency'].iloc[0] * 1.2 )
     ax2.set_ylim(0, percentage_lim * 1.1)
 
     return fig
