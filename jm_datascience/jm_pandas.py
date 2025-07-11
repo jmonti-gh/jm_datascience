@@ -5,6 +5,10 @@ jm_pandas
 ## TO-DO
 # paretto chart calc cumulative % or pass as argument ..... make an fdt function..
 
+## fdt!
+# Considerar la opción de adicionar los nulls-nans-pd.NAs opcionalmente a la fdt
+# EN REALIDAD el tema de los nans lo tengo que ver en el to_series_with_count()
+
 ## OJO con la doble función de formateo de datos que tengo... OJO
 # porque debería ajustar tanto esta que tengo acá com la de jm_rchprt o DEJAR SOLO UNA!!!???
 # NO SE si conviene hacer dos porque en el caso de series tengo que considerar que NO es bueno mezclar n decimal con 0 decimals en una MISMA Series
@@ -174,36 +178,50 @@ def get_fdt(
         data: Union[pd.Series, np.ndarray, dict, list, pd.DataFrame],
         must_count: Optional[bool] = False,
         pcts: Optional[bool] = True,
-        sort: Optional[str] = None,
-        plain_relatives: Optional[bool] = False,
+        plain_relatives: Optional[bool] = True,
         fmt_values: Optional[bool] = False,
+        sort: Optional[str] = 'desc',
 ) -> pd.DataFrame:
     '''
     OJO, continuar con estos detalles
-    sort: None, 'asc', 'desc', 'ix_asc', 'ix_des' para como queremos que sea vea el orden por valores o por indice
-    
+    sort: 'asc', 'desc', 'ix_asc', 'ix_des' para como queremos que sea vea el orden por valores o por indice
     
     '''
-
+    columns = [
+        'Frequency',
+        'Cumulative Frequency',
+        'Relative Frequency',
+        'Cumulative Relative Freq.',
+        'Relative Freq. [%]',
+        'Cumulative Freq. [%]'
+    ]
 
     fdt = pd.DataFrame(to_serie_with_count(data, must_count=must_count))
-    fdt.columns = ['Frequency']
-    fdt['Cumulative Frequency'] = fdt['Frequency'].cumsum()
-    fdt['Relative Freq. [%]'] = fdt['Frequency'] / fdt['Frequency'].sum() * 100
-    fdt['Cumulative Freq. [%]'] = fdt['Relative Freq. [%]'].cumsum()
+    fdt.columns = [columns[0]]
+    fdt[columns[1]] = fdt['Frequency'].cumsum()
+    fdt[columns[2]] = fdt['Frequency'] / fdt['Frequency'].sum()
+    fdt[columns[3]] = fdt['Relative Frequency'].cumsum()
+    fdt[columns[4]] = fdt['Relative Frequency'] * 100
+    fdt[columns[5]] = fdt['Cumulative Relative Freq.'] * 100
+
+    if not pcts:                    # Don't return percentage columns
+        fdt = fdt[columns[0:4]]
+    
+    if not plain_relatives:         # Don't return relative and plain cumulative
+        fdt = fdt[[columns[0], columns[4], columns[5]]]
 
     if fmt_values:
         fdt = fdt.map(_fmt_value_for_pd)
 
-    return fdt
-
-
-
-
-# state_fdt_us = pd.DataFrame(df['State'].value_counts())
-# state_fdt_us['Relative Freq. US-only [%]'] = state_fdt_us['count'] / state_fdt_us['count'].sum() * 100
-# state_fdt_us['Cumulative Freq. US-only [%]'] = state_fdt_us['Relative Freq. US-only [%]'].cumsum()
-# state_fdt_us
+    match sort:
+        case 'asc':
+            return fdt.sort_values(by=columns[0])
+        case 'ix_asc':
+            return fdt.sort_index()
+        case 'ix_desc':
+            return fdt.sort_index(ascending=False)
+        case _:
+            return fdt
 
 
 def describeplus(data, decimals=2, miles=',') -> pd.DataFrame:
@@ -541,8 +559,9 @@ def plt_pie(
     return fig, ax
 
 
-def plt_paretto(
+def plt_pareto(
     data: Union[pd.Series, pd.DataFrame],
+    must_count=False,
     scale: Optional[int] = 2,
     title: Optional[str] = None,
     palette: Optional[list] = 'colorblind',
@@ -561,7 +580,7 @@ def plt_paretto(
     if isinstance(data, pd.DataFrame):
         data = to_serie_with_count(data)
 
-    _validate_categorical_parameters(data)
+    # _validate_categorical_parameters(data)
     
     # # Validate kind parameter
     # if kind.lower() not in ['pie', 'donut']:
@@ -574,9 +593,12 @@ def plt_paretto(
     
     # Build graphs size, and fonts size from scale, and validate scale from 1 to 6.
     if scale < 1 or scale > 9:
-        raise ValueError(f"[ERROR] Invalid 'scale' value. Must between '1' and '6', not '{scale}'.")
+        raise ValueError(f"[ERROR] Invalid 'scale' value. Must between '1' and '9', not '{scale}'.")
     else:
         scale = round(scale)
+
+    # Get de fdt
+    fdt = get_fdt(data, must_count=must_count, plain_relatives=False)
 
     multiplier, w_base, h_base  = 1.33333334 ** scale, 4.45, 2.25
     width, high= w_base * multiplier, h_base * multiplier
@@ -587,7 +609,7 @@ def plt_paretto(
 
     # Base fig definitions - create basic bar plot
     fig, ax = plt.subplots(figsize=(width, high), subplot_kw=dict(aspect="equal"))
-    bplot = ax.bar(data.index, data.values, color=color1)
+    bplot = ax.bar(fdt.index, fdt['Frecuency'], color=color1)
 
     # Add bar labels
     ax.bar_label(bplot,
@@ -600,8 +622,8 @@ def plt_paretto(
     percentage_lim = 100
     ax2.set_ylim(0, percentage_lim)     # make the secondary y scale from 0 to 100
 
-    ax2.plot(state_fdt_us.index,
-            state_fdt_us['Cumulative Freq. US-only [%]'],
+    ax2.plot(data.index,
+            data['Cumulative Freq. [%]'],
             color=color2,
             marker="D",
             ms=line_size)
@@ -609,10 +631,10 @@ def plt_paretto(
     ax2.yaxis.set_major_formatter(PercentFormatter())
 
     # Add maeker labels (in percentage) 
-    formatted_weights = [f'{x:.0f}%' for x in state_fdt_us['Cumulative Freq. US-only [%]']]  
+    formatted_weights = [f'{x:.0f}%' for x in fdt['Cumulative Freq. [%]']]  
     for i, txt in enumerate(formatted_weights):
             ax2.annotate(txt,
-                        (state_fdt_us.index[i], state_fdt_us['Cumulative Freq. US-only [%]'].iloc[i] - 6),
+                        (fdt.index[i], fdt['Cumulative Freq. [%]'].iloc[i] - 6),
                         color='orange')    
 
     # specify axis colors and x-axis rotation
@@ -626,11 +648,10 @@ def plt_paretto(
     # ax2.margins(0.3)                      # DO NOT work
 
     # https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.set_ylim.html#matplotlib.axes.Axes.set_ylim
-    ax.set_ylim(0, state_fdt_us['count'].iloc[0] * 1.2 )
+    ax.set_ylim(0, fdt['Frecuency'].iloc[0] * 1.2 )
     ax2.set_ylim(0, percentage_lim * 1.1)
 
-    #display Pareto chart
-    plt.show()
+    return fig
 
 
 
