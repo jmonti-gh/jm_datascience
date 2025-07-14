@@ -14,7 +14,7 @@ jm_pandas
 #   labels, legends, numbers, line size  - size!!
 
 ## Pie
-#   Versión con TODO EXTERNO
+#   Versión con TODO los labels EXTERNO
 
 ## OJO con la doble función de formateo de datos que tengo... OJO
 # porque debería ajustar tanto esta que tengo acá com la de jm_rchprt o DEJAR SOLO UNA!!!???
@@ -94,9 +94,10 @@ def _fmt_value_for_pd(value, width=8, decimals=2, miles=',') -> str:
         return str(value).rjust(width)                      # Alinea también strings, para mantener la grilla
 
 
-def to_serie_with_count(
-    data: Union[pd.Series, np.ndarray, dict, list, pd.DataFrame],
-    must_count: Optional[bool] = False
+def to_series(
+    data: Union[pd.Series, np.ndarray, dict, list, set, pd.DataFrame],
+    index: Optional[pd.Index] = None,
+    name: Optional[str] = None
 ) -> pd.Series:
     """
     Converts input data into a pandas Series, optionally returning value counts.
@@ -151,48 +152,52 @@ def to_serie_with_count(
         Name: Value, dtype: int64
     """
     
-    # Validate count parameter
-    if not isinstance(must_count, (bool, int)):
-        return TypeError(f"* count must be bool or int 0 or 1. Not '{type(data)}'.")
-    if isinstance(must_count, int) and must_count not in (0, 1):
-        return ValueError(f"* count as int must be 0 or 1. Not '{must_count}'.")
+    # Validate parameters - FUTURE
     
     if isinstance(data, pd.Series):                 # If series is already a Series no conversion needed
-        serie = data                                  
+        series = data                                  
     elif isinstance(data, np.ndarray):              # If data is a NumPy array   
-        serie = pd.Series(data.flatten())
+        series = pd.Series(data.flatten())
     elif isinstance(data, (dict, list)):
-        serie = pd.Series(data)
+        series = pd.Series(data)
+    elif isinstance(data, (set)):
+        series = pd.Series(tuple(data))
     elif isinstance(data, pd.DataFrame):
         if data.shape[1] == 1:                      # Also len(data.columns == 1)
-            serie = data.iloc[:, 0]
+            series = data.iloc[:, 0]
         elif data.shape[1] == 2:                    # Index: first col, Data: 2nd Col
-            serie = data.set_index(data.columns[0])[data.columns[1]]
+            series = data.set_index(data.columns[0])[data.columns[1]]
         else:
             raise ValueError("DataFrame must have 1 oer 2 columns. Categories and values for 2 columns cases.")
     else:
         raise TypeError(f"Unsupported data type: {type(data)}. "
-                    "Supported types: pd.Series, np.ndarray, pd.DataFrame, dict, list, and pd.DataFrame")
+                    "Supported types: pd.Series, np.ndarray, pd.DataFrame, dict, list, set, and pd.DataFrame")
 
-    if must_count:
-        return serie.value_counts()
-    else:
-        return serie
+    if name:
+        series.name = name
 
+    if index:
+        series.index = index
 
+    return series
+
+                      
 # Create a complete frecuency distribution table fron a categorical data
 def get_fdt(
         data: Union[pd.Series, np.ndarray, dict, list, pd.DataFrame],
-        must_count: Optional[bool] = False,
+        value_counts: Optional[bool] = False,
         pcts: Optional[bool] = True,
         plain_relatives: Optional[bool] = True,
         fmt_values: Optional[bool] = False,
         sort: Optional[str] = 'desc',
+        nans: Optional[str] = 'drop'
 ) -> pd.DataFrame:
     '''
-    OJO, continuar con estos detalles
-    sort: 'asc', 'desc', 'ix_asc', 'ix_des' para como queremos que sea vea el orden por valores o por indice
-    
+    Generata a Frequency Distribution Table (fdt)
+
+    data: puede ser ya con el value_counts() hecho o no
+    sort: 'desc', 'asc', 'ix_asc', 'ix_desc', para como queremos que sea vea el orden por valores o por indice
+    nans: 'drop', 'last', 'sort'
     '''
     columns = [
         'Frequency',
@@ -202,8 +207,14 @@ def get_fdt(
         'Relative Freq. [%]',
         'Cumulative Freq. [%]'
     ]
+    
+    sr = to_series(data)
+    # nans = sr.isna().sum()        # FUTURE to think if nans is interesting to see here or in a pareto u other categorical chart
 
-    fdt = pd.DataFrame(to_serie_with_count(data, must_count=must_count))
+    if value_counts:
+        sr = sr.value_counts()
+
+    fdt = pd.DataFrame(sr)
     fdt.columns = [columns[0]]
     fdt[columns[1]] = fdt['Frequency'].cumsum()
     fdt[columns[2]] = fdt['Frequency'] / fdt['Frequency'].sum()
@@ -219,7 +230,7 @@ def get_fdt(
 
     if fmt_values:
         fdt = fdt.map(_fmt_value_for_pd)
-
+        
     match sort:
         case 'asc':
             return fdt.sort_values(by=columns[0])
@@ -234,7 +245,7 @@ def get_fdt(
 def describeplus(data, decimals=2, miles=',') -> pd.DataFrame:
     ''' Descriptive sats of data'''
 
-    serie = to_serie_with_count(data)          # Convert data to a pandas Series
+    serie = to_series(data)          # Convert data to a pandas Series
     
     # Calc valid values for numerical and categorical series
     non_null_count = serie.count()
@@ -329,7 +340,6 @@ def petty_decimals_and_str(serie):
         elif isinstance(value, float):
             if value % 1 > 0:
                 print(f"float -> {ix = } - {value = }")
-
 
 
 ## CHARTs Functions
@@ -458,7 +468,7 @@ def plt_pie(
     """
     # Convert to serie en case of DF
     if isinstance(data, pd.DataFrame):
-        data = to_serie_with_count(data)
+        data = to_series(data)
 
     _validate_categorical_parameters(data)
     
@@ -568,7 +578,7 @@ def plt_pie(
 
 def plt_pareto(
     data: Union[pd.Series, pd.DataFrame],
-    must_count=False,
+    value_counts=False,
     scale: Optional[int] = 2,
     title: Optional[str] = None,
     palette: Optional[list] = 'colorblind',
@@ -585,7 +595,7 @@ def plt_pareto(
 
     # Convert to serie en case of DF
     if isinstance(data, pd.DataFrame):
-        data = to_serie_with_count(data)
+        data = to_series(data)
 
     # Validate data parameter a pandas object
     if not isinstance(data, (pd.Series, pd.DataFrame)):     # pd.Series or pd.Datafram
@@ -609,7 +619,7 @@ def plt_pareto(
         scale = round(scale)
 
     # Get de fdt
-    fdt = get_fdt(data, must_count=must_count, plain_relatives=False)
+    fdt = get_fdt(data, value_counts=value_counts, plain_relatives=False)
 
     multiplier, w_base, h_base  = 1.33333334 ** scale, 4.45, 2.25
     width, high= w_base * multiplier, h_base * multiplier
