@@ -32,13 +32,14 @@ __last_modified__ = "2025-06-30"
 
 
 ## Standard Libs
-from typing import Union, Optional, Any
+from typing import Union, Optional, Any, Literal
 
 # Third-Party Libs
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.ticker import PercentFormatter  # for pareto chart and ?
+import seaborn as sns
 ## Claude - Qwen
 
 # An auxiliar function to change num format - OJO se puede hacer más amplia como jm_utils.jm_rchprt.fmt...
@@ -345,10 +346,12 @@ def petty_decimals_and_str(serie):
 #  CHARTs Functions:
 #--------------------------------------------------------------------------------------------------------------------------------#
 #   - Aux: get_colorblind_palette_list(), get_colors_list(),  _validate_numeric_series()
-# Common patameters for categorical charts:
-#   - data: Union[pd.Series, pd.DataFrame],     | One or two col DF. Case two cols 1se col is index (categories) and 2nd values
-#   - value_counts: Optional[bool] = False,     | You can plot native values or agregated ones by categorie
-# ...
+# Common parameters for categorical charts:
+#   - data: Union[pd.Series, pd.DataFrame], | One or two col DF. Case two cols 1se col is index (categories) and 2nd values
+#   - value_counts: Optional[bool] = False, | You can plot native values or aggregated ones by categories
+#   - scale: Optional[int] = 2,             | All sizes, widths, etc. are scaled from this number (from 1 to 9)
+#   -
+
 
 def get_colorblind_palette_list():
     """
@@ -585,101 +588,882 @@ def plt_pie(
 
 def plt_pareto(
     data: Union[pd.Series, pd.DataFrame],
-    value_counts=False,
+    value_counts: Optional[bool] = False,
     scale: Optional[int] = 2,
-    title: Optional[str] = None,
-    palette: Optional[list] = 'colorblind',
+    title: Optional[str] = 'Pareto Chart',
+    x_label: Optional[str] = None,
+    y1_label: Optional[str] = None,
+    y2_label: Optional[str] = None,
+    palette: Optional[list] = None,
     color1: Optional[str] = 'midnightblue',
     color2: Optional[str] = 'darkorange',
-    line_size = 4,
-    kind: Optional[str] = 'pie',
-    label_place: Optional[str] = 'ext',
-    startangle: Optional[float] = -40,
-    pct_decimals: Optional[int] = 2,
-    label_rotate: Optional[float] = 0,
-    legend_loc: Optional[str] = 'best'
-) -> tuple[plt.Figure, plt.Axes]:
+    pct_decimals: Optional[int] = 1,
+    label_rotate: Optional[float] = 45,
+    figsize: Optional[tuple] = None,
+    fig_margin: Optional[float] = 1.1,
+    show_grid: Optional[bool] = True,
+    bars_alpha: Optional[float] = 0.8,
+    reference_pct: Optional[float] = 80,
+    reference_linewidth: float = 1,
+    reference_color: str = 'red',
+    reference_alpha: Optional[float] = 0.6,
+    show_reference_lines: bool = True,
+    scaled_cumulative: bool = False,
+) -> tuple[plt.Figure, tuple[plt.Axes, plt.Axes]]:
+    """
+    Generates a Pareto chart with frequency bars and cumulative percentage line.
+
+    This function creates a dual-axis chart showing category frequencies as bars
+    and their cumulative percentage as a line. It supports custom styling, scaling,
+    and automatic formatting of data.
+
+    Parameters:
+        data (Union[pd.Series, pd.DataFrame]): Input data. If DataFrame, it will be
+            converted to a Series using `to_series`.
+        value_counts (bool, optional): Whether to treat the input as raw categories
+            and count frequencies. Default is False.
+        scale (int, optional): Chart scaling factor (1 to 9). Affects figure size and font sizes.
+            Default is 2.
+        title (str, optional): Chart title. Default is 'Pareto Chart'.
+        x_label (str, optional): Label for the x-axis. Default is the index name of the data.
+        y1_label (str, optional): Label for the primary y-axis (frequencies). Default is the first column name.
+        y2_label (str, optional): Label for the secondary y-axis (cumulative percentages).
+            Default is the last column name.
+        palette (list, optional): List of color names or hex codes for bar colors.
+            Overrides `color1` if provided.
+        color1 (str, optional): Color for the bars and primary y-axis labels. Default is 'midnightblue'.
+        color2 (str, optional): Color for the cumulative percentage line and secondary y-axis labels.
+            Default is 'darkorange'.
+        pct_decimals (int, optional): Number of decimal places to display in percentage labels.
+            Default is 1.
+        label_rotate (float, optional): Rotation angle for x-axis labels. Default is 45.
+        figsize (tuple, optional): Width and height of the figure in inches. If not provided,
+            it is calculated based on `scale`.
+        fig_margin (float, optional): Margin multiplier for y-axis limits. Default is 1.1.
+        show_grid (bool, optional): Whether to show grid lines. Default is True.
+        bars_alpha (float, optional): Transparency level for bars. Default is 0.8.
+        reference_pct (float, optional): Reference percentage line to draw on the chart.
+            Must be between 0 and 100. Default is 80.
+        reference_linewidth (float, optional): Width of the reference line. Default is 1.
+        reference_color (str, optional): Color of the reference line. Default is 'red'.
+        reference_alpha (float, optional): Transparency of the reference line. Default is 0.6.
+        show_reference_lines (bool, optional): Whether to show the reference percentage line.
+            Default is True.
+        scaled_cumulative (bool, optional): Whether to scale the cumulative line to match the bar axis.
+            If False, uses a separate percentage axis. Default is False.
+
+    Returns:
+        tuple[plt.Figure, tuple[plt.Axes, plt.Axes]]: A tuple containing:
+            - fig: The Matplotlib Figure object.
+            - (ax, ax2): Primary and secondary Axes objects for further customization.
+
+    Raises:
+        TypeError: If input data is not a pandas Series or DataFrame.
+        ValueError: If scale is not between 1 and 9 or reference_pct is invalid.
+
+    Notes:
+        - This function uses `get_fdt` to compute frequency distribution tables.
+        - It supports rich annotations, custom palettes, and reference lines for better insights.
+        - The chart includes a subtitle with summary statistics: total items, number of categories,
+          top 3 contribution, and null count.
+
+    Example:
+        >>> import pandas as pd
+        >>> data = pd.Series(['A', 'B', 'A', 'C', 'B', 'B', 'A', 'A', 'B', 'C'])
+        >>> fig, (ax, ax2) = plt_pareto(data, title='Product Defects Distribution')
+        >>> plt.show()
+    """
 
     # Convert to serie en case of DF
     if isinstance(data, pd.DataFrame):
         data = to_series(data)
 
     # Validate data parameter a pandas object
-    if not isinstance(data, (pd.Series, pd.DataFrame)):     # pd.Series or pd.Datafram
+    if not isinstance(data, (pd.Series, pd.DataFrame)):
         raise TypeError(
             f"Input data must be a pandas Series or DataFrame. Got {type(data)} instead."
         )
     
-    # # Validate kind parameter
-    # if kind.lower() not in ['pie', 'donut']:
-    #     raise ValueError(f"Invalid 'kind' parameter: '{kind}'. Must be 'pie' or 'donut'.")
+    # Validate and process scale parameter
+    if not (1 <= scale <= 9):
+        raise ValueError(f"Invalid 'scale' value. Must be between 1 and 9, got {scale}.")
     
-    # # Validate maximum categories
-    # if len(data) > 9:
-    #     raise ValueError(f"Data contains {len(data)} categories. "
-    #                     "Maximum allowed is 9 categories.")
+    scale = round(scale)
     
-    # Build graphs size, and fonts size from scale, and validate scale from 1 to 6.
-    if scale < 1 or scale > 9:
-        raise ValueError(f"[ERROR] Invalid 'scale' value. Must between '1' and '9', not '{scale}'.")
-    else:
-        scale = round(scale)
+    # Validate reference percentage
+    if reference_pct is not None and not (0 < reference_pct <= 100):
+        raise ValueError(f"reference_pct must be between 0 and 100, got {reference_pct}")
+    
+    # Validate reference linewidth
+    if reference_linewidth < 0:
+        raise ValueError(f"reference_linewidth must be non-negative, got {reference_linewidth}")
 
-    # Get de fdt
+    # Before getting the Frequency Distribution Table get the nulls
+    nulls = data.isna().sum()
+
+    # Get de fdt. categories=fdt.index; frequencies=fdt.iloc[:, 0]; relative_pcts=fdt.iloc[:, -2]; cumulative_pcts=fdt.iloc[:, -1]
     fdt = get_fdt(data, value_counts=value_counts, plain_relatives=False)
 
-    multiplier, w_base, h_base  = 1.33333334 ** scale, 4.45, 2.25
-    width, high= w_base * multiplier, h_base * multiplier
-    label_size = width * 1.25
-    title_size = label_size * 1.25
+    # Calculate figure dimensions
+    if figsize is None:
+        multiplier = 1.33333334 ** scale
+        w_base, h_base = 4.45, 2.25
+        width, height = w_base * multiplier, h_base * multiplier
+        figsize = (width, height)
+    else:
+        width, height = figsize
+    
+    # Calculate font sizes based on figure width
+    bar_label_size = width
+    axis_label_size = width * 1.25
+    title_size = width * 1.57
 
-    # define aesthetics for plot - color1 and 2 plus line_size
+    # Calculate cumulative_line sizes
+    markersize = width * 0.3
+    linewidth = width * 0.1
 
-    # Base fig definitions - create basic bar plot
-    fig, ax = plt.subplots(figsize=(width, high), tight_layout=True)
-    bplot = ax.bar(fdt.index, fdt['Frequency'], color=color1)
+    # Set up colors
+    if palette:
+        color_palette = get_colors_list(palette, fdt.shape[0])
+        color1 = color_palette[0]                                   # In this case don't consider color1 parameter
+    else:
+        color_palette = color1
 
-    # Add bar labels
-    ax.bar_label(bplot,
+    # Create figure and primary axis
+    fig, ax = plt.subplots(figsize=figsize, tight_layout=True)
+    
+    # Create bar plot
+    bars = ax.bar(fdt.index, fdt.iloc[:, 0], 
+                  color=color_palette,
+                  width=0.95, 
+                  alpha=bars_alpha,
+                  edgecolor='white', 
+                  linewidth=0.5)
+
+    # Add value labels on bars
+    labels = [f"[{fdt.iloc[ix, 0]}]  {fdt.iloc[ix, -2]:.1f} %" for ix in range(fdt.shape[0])]
+    ax.bar_label(bars,
+                labels=labels,
+                fontsize=bar_label_size * 0.9,
                 fontweight='bold',
                 color=color1,
-                padding=4)
+                label_type='edge',  # Etiqueta fuera de la barra
+                padding=2)          #, rotation=90)  # opcional
 
-    # add cumulative percentage line to plot
+    # Create secondary y-axis for cumulative percentage
     ax2 = ax.twinx()        # create another y-axis sharing a common x-axis
-    percentage_lim = 100
-    ax2.set_ylim(0, percentage_lim)     # make the secondary y scale from 0 to 100
+    
+    # Calculate cumulative values
+    cumulative_percentages = fdt.iloc[:, -1]            # Last column: ['Cumulative Freq. [%]']
+    
+    if scaled_cumulative:                               # Scaling mode fixed
+        total_sum = fdt.iloc[:, 0].sum()
+        
+        # Convert cumulative percentages to scaled heightsdas
+        scaled_values = (cumulative_percentages / 100) * total_sum
+        
+        # Draw the scaled line on the main axis (x=index, y=scaled_values)
+        line = ax.plot(fdt.index, scaled_values,
+                       color=color2,
+                       marker="D",
+                       markersize=markersize,
+                       linewidth=linewidth,
+                       markeredgecolor='white',
+                       markeredgewidth=0.2)
+        
+        # Adjust main axis limits to include the line
+        max_freq = fdt.iloc[:, 0].max()
+        max_scaled = scaled_values.max()
+        # Use the maximum between the bars and the scaled line, with margin
+        ax.set_ylim(0, max(max_freq, max_scaled) * fig_margin)
+        
+        # CORRECCIÓN: Configurar ax2 para que coincida con la escala del eje principal
+        ax2.set_ylim(0, max(max_freq, max_scaled) * fig_margin)
+        
+        # Create custom stickers for ax2 that show percentages, corresponding to the climbed heights
+        ax2_ticks = []
+        ax2_labels = []
+        for pct in [0, 20, 40, 60, 80, 100]:
+            scaled_tick = (pct / 100) * total_sum
+            if scaled_tick <= max(max_freq, max_scaled) * fig_margin:
+                ax2_ticks.append(scaled_tick)
+                ax2_labels.append(f'{pct}%')
+        
+        ax2.set_yticks(ax2_ticks)
+        ax2.set_yticklabels(ax2_labels)
+        
+        # % point labels
+        formatted_weights = [f'{x:.{pct_decimals}f}%' for x in cumulative_percentages]
+        for i, txt in enumerate(formatted_weights):
+            if i == 0:              # To change only % annotate of the first bar         
+                distance = 0.08     # first % annotate, away from the bar
+            else:
+                distance = 0.025    # The others % annotates, not so far
+            ax.annotate(txt,
+                       (fdt.index[i], scaled_values.iloc[i] + (max(max_freq, max_scaled) * distance)),
+                       color=color2,
+                       fontsize=bar_label_size,
+                       ha='center')
+        
+        # Reference lines in scaled mode
+        if show_reference_lines and reference_pct is not None:
+            reference_scaled_height = (reference_pct / 100) * total_sum
+            
+            # AXHLINE and its text
+            ax.axhline(y=reference_scaled_height, color=reference_color, linestyle='--', 
+                      alpha=reference_alpha, linewidth=reference_linewidth)
+            
+            ax.text(0.01, reference_scaled_height + (max(max_freq, max_scaled) * 0.02), 
+                   f'{reference_pct}%', 
+                   transform=ax.get_yaxis_transform(), 
+                   color=reference_color, fontsize=bar_label_size*0.8)
+    
+    else:                                           # Native scaling
+        ax2.set_ylim(0, 100 * fig_margin)
+        
+        line = ax2.plot(fdt.index, cumulative_percentages,
+                        color=color2,
+                        marker="D",
+                        markersize=markersize,
+                        linewidth=linewidth,
+                        markeredgecolor='white',
+                        markeredgewidth=0.2)
+        
+        ax2.yaxis.set_major_formatter(PercentFormatter())
 
-    ax2.plot(fdt.index,
-            fdt['Cumulative Freq. [%]'],
+        formatted_weights = [f'{x:.{pct_decimals}f}%' for x in cumulative_percentages]  
+        for i, txt in enumerate(formatted_weights):
+                ax2.annotate(txt,
+                            (fdt.index[i], cumulative_percentages.iloc[i] - 6),
+                            color=color2,
+                            fontsize=bar_label_size,
+                            ha='center')
+        
+        if show_reference_lines and reference_pct is not None:
+            ax2.axhline(y=reference_pct, color=reference_color, linestyle='--', 
+                       alpha=reference_alpha, linewidth=reference_linewidth)
+            
+            ax2.text(0.01, reference_pct + 3, f'{reference_pct}%', 
+                        transform=ax2.get_yaxis_transform(), 
+                        color=reference_color, fontsize=bar_label_size*0.8)
+
+    # Configure tick parameters
+    ax.tick_params(axis='y', colors=color1, labelsize=bar_label_size)
+    ax.tick_params(axis='x', rotation=label_rotate, labelsize=bar_label_size)
+    ax2.tick_params(axis='y', colors=color2, labelsize=bar_label_size)
+
+    # Set y-axis limits (solo para modo original)
+    if not scaled_cumulative:
+        max_freq = fdt.iloc[:, 0].max()
+        ax.set_ylim(0, max_freq * fig_margin)
+
+    # Add grid if requested
+    if show_grid:
+        ax.grid(True, alpha=0.3, linestyle='--')
+        ax.set_axisbelow(True)
+
+    # Set title and labels
+    if not x_label:
+         x_label = fdt.index.name
+    
+    if not y1_label:
+         y1_label = fdt.columns[0]
+
+    if not y2_label:
+         y2_label = fdt.columns[-1]
+
+    # Enhanced subtitle with statistics
+    total_items = fdt.iloc[:, 0].sum()      # frequencies.sum()
+    n_categories = len(fdt.index)           # len(categories)
+    top_3_pct = cumulative_percentages.iloc[min(2, len(cumulative_percentages)-1)]      # if len(cum_pcts) < 2
+    subtitle = f"Total: {total_items:,} | Categories: {n_categories} | Top 3: {top_3_pct:.1f}% | Nulls: {nulls}"
+
+    # Apply title and labels
+    fig.suptitle(title, fontsize=title_size, fontweight='bold')
+    ax.set_title(subtitle, fontsize=axis_label_size*0.8, color=color1, pad=10)
+    ax.set_xlabel(x_label, fontsize=axis_label_size, fontweight='medium')
+    ax.set_ylabel(y1_label, fontsize=axis_label_size, color=color1, fontweight='medium')
+    ax2.set_ylabel(y2_label, fontsize=axis_label_size, color=color2, fontweight='medium')
+
+    return fig, (ax, ax2)
+
+
+def sns_pareto(
+    data: Union[pd.Series, pd.DataFrame],
+    value_counts: bool = False,
+    scale: Optional[int] = 2,
+    title: Optional[str] = 'Pareto Chart',
+    x_label: Optional[str] = None,
+    y1_label: Optional[str] = None,
+    y2_label: Optional[str] = None,
+    palette: Optional[str] = 'husl',
+    palette_type: Literal['qualitative', 'sequential', 'diverging'] = 'qualitative',
+    color1: Optional[str] = 'steelblue',
+    color2: Optional[str] = 'coral',
+    theme: Optional[str] = 'whitegrid',
+    context: Literal['paper', 'notebook', 'talk', 'poster'] = 'notebook',
+    pct_decimals: Optional[int] = 1,
+    label_rotate: Optional[float] = 45,
+    figsize: Optional[tuple] = None,
+    fig_margin: Optional[float] = 1.15,
+    show_grid: Optional[bool] = True,
+    grid_alpha: Optional[float] = 0.3,
+    bars_alpha: Optional[float] = 0.85,
+    reference_pct: Optional[float] = 80,
+    reference_linewidth: float = 2,
+    reference_color: str = 'crimson',
+    reference_alpha: Optional[float] = 0.8,
+    show_reference_lines: bool = True,
+    scaled_cumulative: bool = False,
+    annotation_style: Literal['outside', 'inside', 'edge'] = 'outside',
+    show_confidence_interval: bool = False,
+    confidence_level: float = 0.95,
+    bar_edge_color: str = 'white',
+    bar_edge_width: float = 0.8,
+    rounded_bars: bool = True,
+    sorting: Literal['frequency', 'alphabetical', 'custom'] = 'frequency',
+    custom_order: Optional[list] = None,
+    show_statistics: bool = True,
+    modern_styling: bool = True,
+    line_style: Literal['solid', 'dashed', 'dotted'] = 'solid',
+    marker_style: str = 'o',
+    gradient_bars: bool = False,
+    show_percentages_on_bars: bool = True,
+    show_legend: bool = True,
+    legend_position: str = 'upper right',
+    use_sns_palette_colors: bool = True,
+) -> tuple[plt.Figure, tuple[plt.Axes, plt.Axes]]:
+    """
+    Create an enhanced Pareto chart using Seaborn with modern styling and professional appearance.
+    
+    A Pareto chart is a bar chart where the bars are ordered by frequency/value in descending order,
+    with a cumulative percentage line overlaid. This enhanced version includes modern styling,
+    statistical features, and improved visual customization.
+    
+    Parameters
+    ----------
+    data : Union[pd.Series, pd.DataFrame]
+        Input data for the Pareto chart
+    value_counts : bool, default False
+        Whether to apply value_counts to the data
+    scale : Optional[int], default 2
+        Scale factor for figure sizing (1-9)
+    title : Optional[str], default 'Pareto Chart'
+        Chart title
+    x_label : Optional[str], default None
+        X-axis label
+    y1_label : Optional[str], default None
+        Primary y-axis label
+    y2_label : Optional[str], default None
+        Secondary y-axis label
+    palette : Optional[str], default 'husl'
+        Seaborn color palette name ('husl', 'viridis', 'Set1', 'plasma', etc.)
+    palette_type : Literal['qualitative', 'sequential', 'diverging'], default 'qualitative'
+        Type of color palette to use
+    color1 : Optional[str], default 'steelblue'
+        Primary color for bars (used when palette is None)
+    color2 : Optional[str], default 'coral'
+        Secondary color for cumulative line
+    theme : Optional[str], default 'whitegrid'
+        Seaborn theme ('darkgrid', 'whitegrid', 'dark', 'white', 'ticks')
+    context : Literal['paper', 'notebook', 'talk', 'poster'], default 'notebook'
+        Seaborn context for scaling elements
+    pct_decimals : Optional[int], default 1
+        Decimal places for percentage labels
+    label_rotate : Optional[float], default 45
+        Rotation angle for x-axis labels
+    figsize : Optional[tuple], default None
+        Figure size (width, height)
+    fig_margin : Optional[float], default 1.15
+        Margin multiplier for y-axis limits
+    show_grid : Optional[bool], default True
+        Whether to show grid
+    grid_alpha : Optional[float], default 0.3
+        Grid transparency
+    bars_alpha : Optional[float], default 0.85
+        Transparency for bars
+    reference_pct : Optional[float], default 80
+        Reference percentage for horizontal line
+    reference_linewidth : float, default 2
+        Line width for reference lines
+    reference_color : str, default 'crimson'
+        Color for reference lines
+    reference_alpha : Optional[float], default 0.8
+        Transparency for reference lines
+    show_reference_lines : bool, default True
+        Whether to show reference lines
+    scaled_cumulative : bool, default False
+        Whether to scale cumulative line to match bar heights
+    annotation_style : Literal['outside', 'inside', 'edge'], default 'outside'
+        Position of value annotations on bars
+    show_confidence_interval : bool, default False
+        Whether to show confidence interval for cumulative line
+    confidence_level : float, default 0.95
+        Confidence level for intervals
+    bar_edge_color : str, default 'white'
+        Color of bar edges
+    bar_edge_width : float, default 0.8
+        Width of bar edges
+    rounded_bars : bool, default True
+        Whether to use rounded bar corners (visual effect)
+    sorting : Literal['frequency', 'alphabetical', 'custom'], default 'frequency'
+        How to sort the categories
+    custom_order : Optional[list], default None
+        Custom order for categories (used when sorting='custom')
+    show_statistics : bool, default True
+        Whether to show statistical summary in legend
+    modern_styling : bool, default True
+        Whether to apply modern styling enhancements
+    line_style : Literal['solid', 'dashed', 'dotted'], default 'solid'
+        Style of the cumulative line
+    marker_style : str, default 'o'
+        Marker style for cumulative line points
+    gradient_bars : bool, default False
+        Whether to apply gradient effect to bars
+    show_percentages_on_bars : bool, default True
+        Whether to show individual percentages on bars
+    show_legend : bool, default True
+        Whether to show legend
+    legend_position : str, default 'upper right'
+        Position of the legend
+    use_sns_palette_colors : bool, default True
+        Whether to use seaborn palette colors for bars
+    
+    Returns
+    -------
+    Tuple[plt.Figure, Tuple[plt.Axes, plt.Axes]]
+        Figure and tuple of primary and secondary axes
+    """
+    
+    # Set seaborn theme and context
+    if theme:
+        sns.set_style(theme)
+    if context:
+        sns.set_context(context)
+    
+    # Convert to series if DataFrame
+    if isinstance(data, pd.DataFrame):
+        data = to_series(data)  # Assuming this function exists
+    
+    # Validate data parameter
+    if not isinstance(data, (pd.Series, pd.DataFrame)):
+        raise TypeError(
+            f"Input data must be a pandas Series or DataFrame. Got {type(data)} instead."
+        )
+    
+    # Validate and process scale parameter
+    if not (1 <= scale <= 9):
+        raise ValueError(f"Invalid 'scale' value. Must be between 1 and 9, got {scale}.")
+    
+    scale = round(scale)
+    
+    # Validate reference percentage
+    if reference_pct is not None and not (0 < reference_pct <= 100):
+        raise ValueError(f"reference_pct must be between 0 and 100, got {reference_pct}")
+    
+    # Validate reference linewidth
+    if reference_linewidth < 0:
+        raise ValueError(f"reference_linewidth must be non-negative, got {reference_linewidth}")
+    
+    # Count nulls before processing
+    nulls = data.isna().sum()
+    
+    # Get frequency distribution table
+    fdt = get_fdt(data, value_counts=value_counts, plain_relatives=False)  # Assuming this function exists
+    
+    # Apply sorting
+    if sorting == 'alphabetical':
+        fdt = fdt.sort_index()
+        # Recalculate cumulative percentages after sorting
+        fdt.iloc[:, -1] = (fdt.iloc[:, 0].cumsum() / fdt.iloc[:, 0].sum()) * 100
+    elif sorting == 'custom' and custom_order:
+        available_categories = set(fdt.index)
+        valid_order = [cat for cat in custom_order if cat in available_categories]
+        if valid_order:
+            fdt = fdt.reindex(valid_order)
+            # Recalculate cumulative percentages after reordering
+            fdt.iloc[:, -1] = (fdt.iloc[:, 0].cumsum() / fdt.iloc[:, 0].sum()) * 100
+    # 'frequency' is the default and doesn't need special handling
+    
+    # Calculate figure dimensions
+    if figsize is None:
+        multiplier = 1.33333334 ** scale
+        w_base, h_base = 4.8, 2.4  # Slightly larger base for modern look
+        width, height = w_base * multiplier, h_base * multiplier
+        figsize = (width, height)
+    else:
+        width, height = figsize
+    
+    # Calculate font sizes based on figure width and context
+    context_multipliers = {'paper': 0.8, 'notebook': 1.0, 'talk': 1.2, 'poster': 1.4}
+    ctx_mult = context_multipliers.get(context, 1.0)
+    
+    bar_label_size = width * ctx_mult
+    axis_label_size = width * 1.25 * ctx_mult
+    title_size = width * 1.6 * ctx_mult
+    
+    # Calculate line properties
+    markersize = width * 0.35 * ctx_mult
+    linewidth = width * 0.12 * ctx_mult
+    
+    # Set up the figure and axes
+    fig, ax = plt.subplots(figsize=figsize, tight_layout=True)
+    
+    # Apply modern styling
+    if modern_styling:
+        fig.patch.set_facecolor('white')
+        ax.set_facecolor('white')
+        # Remove top and right spines for cleaner look
+        sns.despine(ax=ax, top=True, right=False)
+    
+    # Prepare data for plotting
+    categories = fdt.index
+    frequencies = fdt.iloc[:, 0]
+    cumulative_percentages = fdt.iloc[:, -1]
+    
+    # Set up colors
+    if use_sns_palette_colors and palette:
+        if palette_type == 'qualitative':
+            colors = sns.color_palette(palette, len(categories))
+        elif palette_type == 'sequential':
+            colors = sns.color_palette(palette, len(categories))
+        elif palette_type == 'diverging':
+            colors = sns.color_palette(palette, len(categories))
+        else:
+            colors = sns.color_palette(palette, len(categories))
+    else:
+        colors = color1
+
+    # Create the bar plot with enhanced styling
+    if use_sns_palette_colors and palette:
+        bars = sns.barplot(
+            x=categories,
+            y=frequencies,
+            hue=categories,  # Add this line - assign x variable to hue
+            palette=colors,
+            alpha=bars_alpha,
+            ax=ax,
+            edgecolor=bar_edge_color,
+            linewidth=bar_edge_width,
+            saturation=0.9,
+            legend=False  # Add this to prevent redundant legend
+        )
+    else:
+        bars = sns.barplot(
+            x=categories,
+            y=frequencies,
+            color=color1,
+            alpha=bars_alpha,
+            ax=ax,
+            edgecolor=bar_edge_color,
+            linewidth=bar_edge_width,
+            saturation=0.9
+        )
+    
+    # Apply gradient effect if requested
+    if gradient_bars:
+        for i, bar in enumerate(bars.patches):
+            # Create gradient effect by varying alpha
+            gradient_alpha = 0.6 + (0.4 * (len(bars.patches) - i) / len(bars.patches))
+            bar.set_alpha(gradient_alpha)
+    
+    # Add value annotations on bars
+    for i, bar in enumerate(bars.patches):
+        height = bar.get_height()
+        
+        # Determine annotation position based on style
+        if annotation_style == 'outside':
+            y_pos = height + (frequencies.max() * 0.02)
+            va = 'bottom'
+        elif annotation_style == 'inside':
+            y_pos = height * 0.5
+            va = 'center'
+        else:  # edge
+            y_pos = height + (frequencies.max() * 0.005)
+            va = 'bottom'
+        
+        # Add frequency annotation
+        ax.text(bar.get_x() + bar.get_width()/2., y_pos,
+                f'{int(height)}',
+                ha='center', va=va,
+                fontsize=bar_label_size * 0.9,
+                fontweight='bold',
+                color=color1 if annotation_style == 'outside' else 'white')
+        
+        # Add percentage on bars if requested
+        if show_percentages_on_bars:
+            pct = (height / frequencies.sum()) * 100
+            ax.text(bar.get_x() + bar.get_width()/2., 
+                   height * 0.85 if annotation_style == 'outside' else height * 0.15,
+                   f'{pct:.1f}%',
+                   ha='center', va='center',
+                   fontsize=bar_label_size * 0.7,
+                   color='white' if annotation_style == 'outside' else color2,
+                   fontweight='medium')
+    
+    # Create secondary y-axis for cumulative percentage
+    ax2 = ax.twinx()
+    
+    # Prepare line style
+    line_styles = {'solid': '-', 'dashed': '--', 'dotted': ':'}
+    ls = line_styles.get(line_style, '-')
+    
+    if scaled_cumulative:
+        # Scaling mode - scale cumulative percentages to match bar heights
+        total_sum = frequencies.sum()
+        scaled_values = (cumulative_percentages / 100) * total_sum
+        
+        # Plot cumulative line on primary axis
+        line_data = pd.DataFrame({
+            'x': range(len(categories)),
+            'y': scaled_values
+        })
+        
+        # Main line
+        sns.lineplot(
+            data=line_data,
+            x='x',
+            y='y',
             color=color2,
-            marker="D",
-            ms=line_size)
-
-    ax2.yaxis.set_major_formatter(PercentFormatter())
-
-    # Add maeker labels (in percentage) 
-    formatted_weights = [f'{x:.0f}%' for x in fdt['Cumulative Freq. [%]']]  
-    for i, txt in enumerate(formatted_weights):
-            ax2.annotate(txt,
-                        (fdt.index[i], fdt['Cumulative Freq. [%]'].iloc[i] - 6),
-                        color='orange')    
-
-    # specify axis colors and x-axis rotation
-    ax.tick_params(axis='y', colors=color1)
-    ax.tick_params(axis='x', rotation=45)
-    ax2.tick_params(axis='y', colors=color2)
-
-    # https://matplotlib.org/stable/gallery/subplots_axes_and_figures/axes_margins.html#sphx-glr-gallery-subplots-axes-and-figures-axes-margins-py
-    # ax.margins(y=0.1)
-    # ax2.use_sticky_edges = False          # DO NOT work
-    # ax2.margins(0.3)                      # DO NOT work
-
-    # https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.set_ylim.html#matplotlib.axes.Axes.set_ylim
-    ax.set_ylim(0, fdt['Frequency'].iloc[0] * 1.2 )
-    ax2.set_ylim(0, percentage_lim * 1.1)
-
-    return fig
+            marker=marker_style,
+            markersize=markersize,
+            linewidth=linewidth,
+            markeredgecolor='white',
+            markeredgewidth=0.3,
+            linestyle=ls,
+            ax=ax,
+            label='Cumulative %'
+        )
+        
+        # Add confidence interval if requested
+        if show_confidence_interval:
+            # Calculate confidence interval (simplified approach)
+            ci_width = scaled_values.std() * 1.96 / np.sqrt(len(scaled_values))
+            ax.fill_between(range(len(categories)), 
+                           scaled_values - ci_width, 
+                           scaled_values + ci_width,
+                           alpha=0.2, color=color2)
+        
+        # Adjust main axis limits
+        max_freq = frequencies.max()
+        max_scaled = scaled_values.max()
+        ax.set_ylim(0, max(max_freq, max_scaled) * fig_margin)
+        
+        # Configure ax2 to match primary axis scale
+        ax2.set_ylim(0, max(max_freq, max_scaled) * fig_margin)
+        
+        # Create custom ticks for ax2
+        ax2_ticks = []
+        ax2_labels = []
+        for pct in [0, 20, 40, 60, 80, 100]:
+            scaled_tick = (pct / 100) * total_sum
+            if scaled_tick <= max(max_freq, max_scaled) * fig_margin:
+                ax2_ticks.append(scaled_tick)
+                ax2_labels.append(f'{pct}%')
+        
+        ax2.set_yticks(ax2_ticks)
+        ax2.set_yticklabels(ax2_labels)
+        
+        # Add percentage labels with improved positioning
+        for i, (cat, pct, scaled_val) in enumerate(zip(categories, cumulative_percentages, scaled_values)):
+            distance = 0.06 if i == 0 else 0.02
+            ax.text(i, scaled_val + (max(max_freq, max_scaled) * distance),
+                   f'{pct:.{pct_decimals}f}%',
+                   ha='center', va='bottom',
+                   color=color2,
+                   fontsize=bar_label_size * 0.8,
+                   fontweight='medium')
+        
+        # Reference lines in scaled mode
+        if show_reference_lines and reference_pct is not None:
+            reference_scaled_height = (reference_pct / 100) * total_sum
+            
+            # Horizontal reference line
+            ax.axhline(y=reference_scaled_height, color=reference_color, linestyle='--',
+                      alpha=reference_alpha, linewidth=reference_linewidth)
+            
+            ax.text(0.02, reference_scaled_height + (max(max_freq, max_scaled) * 0.02),
+                   f'{reference_pct}%',
+                   transform=ax.get_yaxis_transform(),
+                   color=reference_color, fontsize=bar_label_size*0.8,
+                   fontweight='bold')
+            
+            # Vertical reference line
+            cumulative_values = cumulative_percentages.values
+            x_reference_percent = None
+            for i, cum_pct in enumerate(cumulative_values):
+                if cum_pct >= reference_pct:
+                    if i == 0:
+                        x_reference_percent = 0
+                    else:
+                        prev_pct = cumulative_values[i-1]
+                        curr_pct = cumulative_values[i]
+                        x_reference_percent = (i-1) + (reference_pct - prev_pct) / (curr_pct - prev_pct)
+                    break
+            
+            if x_reference_percent is not None:
+                ax.axvline(x=x_reference_percent, color=reference_color, linestyle='--',
+                          alpha=reference_alpha, linewidth=reference_linewidth)
+                
+                ax.text(x_reference_percent + 0.1,
+                       reference_scaled_height - (max(max_freq, max_scaled) * 0.12),
+                       f'{reference_pct}% rule',
+                       rotation=90, color=reference_color, fontsize=bar_label_size*0.7,
+                       ha='left', va='center', fontweight='bold')
+    
+    else:
+        # Native scaling mode
+        ax2.set_ylim(0, 100 * fig_margin)
+        
+        # Plot cumulative line on secondary axis
+        line_data = pd.DataFrame({
+            'x': range(len(categories)),
+            'y': cumulative_percentages
+        })
+        
+        # Main line
+        sns.lineplot(
+            data=line_data,
+            x='x',
+            y='y',
+            color=color2,
+            marker=marker_style,
+            markersize=markersize,
+            linewidth=linewidth,
+            markeredgecolor='white',
+            markeredgewidth=0.3,
+            linestyle=ls,
+            ax=ax2,
+            label='Cumulative %'
+        )
+        
+        # Add confidence interval if requested
+        if show_confidence_interval:
+            ci_width = cumulative_percentages.std() * 1.96 / np.sqrt(len(cumulative_percentages))
+            ax2.fill_between(range(len(categories)), 
+                           cumulative_percentages - ci_width, 
+                           cumulative_percentages + ci_width,
+                           alpha=0.2, color=color2)
+        
+        ax2.yaxis.set_major_formatter(PercentFormatter())
+        
+        # Add percentage labels with improved styling
+        for i, (cat, pct) in enumerate(zip(categories, cumulative_percentages)):
+            ax2.text(i, pct - 8,
+                    f'{pct:.{pct_decimals}f}%',
+                    ha='center', va='top',
+                    color=color2,
+                    fontsize=bar_label_size * 0.8,
+                    fontweight='medium')
+        
+        # Reference lines in native mode
+        if show_reference_lines and reference_pct is not None:
+            ax2.axhline(y=reference_pct, color=reference_color, linestyle='--',
+                       alpha=reference_alpha, linewidth=reference_linewidth)
+            
+            ax2.text(0.02, reference_pct + 4, f'{reference_pct}%',
+                    transform=ax2.get_yaxis_transform(),
+                    color=reference_color, fontsize=bar_label_size*0.8,
+                    fontweight='bold')
+            
+            # Vertical reference line
+            cumulative_values = cumulative_percentages.values
+            x_reference_percent = None
+            for i, cum_pct in enumerate(cumulative_values):
+                if cum_pct >= reference_pct:
+                    if i == 0:
+                        x_reference_percent = 0
+                    else:
+                        prev_pct = cumulative_values[i-1]
+                        curr_pct = cumulative_values[i]
+                        x_reference_percent = (i-1) + (reference_pct - prev_pct) / (curr_pct - prev_pct)
+                    break
+            
+            if x_reference_percent is not None:
+                ax2.axvline(x=x_reference_percent, color=reference_color, linestyle='--',
+                           alpha=reference_alpha, linewidth=reference_linewidth)
+                
+                ax2.text(x_reference_percent + 0.1, reference_pct - 35,
+                         f'{reference_pct}% rule',
+                         rotation=90, color=reference_color, fontsize=bar_label_size*0.7,
+                         ha='left', va='center', fontweight='bold')
+    
+    # Configure tick parameters with modern styling
+    ax.tick_params(axis='y', colors=color1, labelsize=bar_label_size * 0.9)
+    ax.tick_params(axis='x', rotation=label_rotate, labelsize=bar_label_size * 0.9)
+    ax2.tick_params(axis='y', colors=color2, labelsize=bar_label_size * 0.9)
+    
+    # Set y-axis limits for primary axis (only in native mode)
+    if not scaled_cumulative:
+        max_freq = frequencies.max()
+        ax.set_ylim(0, max_freq * fig_margin)
+    
+    # Add enhanced grid
+    if show_grid:
+        ax.grid(True, alpha=grid_alpha, linestyle='-', linewidth=0.5)
+        ax.set_axisbelow(True)
+    
+    # Set default labels if not provided
+    if not x_label:
+        x_label = fdt.index.name or 'Categories'
+    
+    if not y1_label:
+        y1_label = fdt.columns[0] if len(fdt.columns) > 0 else 'Frequency'
+    
+    if not y2_label:
+        y2_label = fdt.columns[-1] if len(fdt.columns) > 0 else 'Cumulative %'
+    
+    # Apply title and labels with improved styling
+    fig.suptitle(title, fontsize=title_size, fontweight='bold', y=0.98)
+    
+    # Enhanced subtitle with statistics
+    if show_statistics:
+        total_items = frequencies.sum()
+        n_categories = len(categories)
+        top_3_pct = cumulative_percentages.iloc[min(2, len(cumulative_percentages)-1)]
+        
+        subtitle = f"Total: {total_items:,} | Categories: {n_categories} | Top 3: {top_3_pct:.1f}% | Nulls: {nulls}"
+        ax.set_title(subtitle, fontsize=axis_label_size*0.7, color='gray', pad=10)
+    else:
+        ax.set_title(f"Nulls: {nulls}", fontsize=axis_label_size*0.8, color=color1, pad=10)
+    
+    ax.set_xlabel(x_label, fontsize=axis_label_size, fontweight='medium')
+    ax.set_ylabel(y1_label, fontsize=axis_label_size, color=color1, fontweight='medium')
+    ax2.set_ylabel(y2_label, fontsize=axis_label_size, color=color2, fontweight='medium')
+    
+    # Add legend if requested
+    if show_legend:
+        # Create custom legend entries
+        legend_elements = []
+        
+        if use_sns_palette_colors and palette:
+            legend_elements.append(plt.Rectangle((0,0),1,1, facecolor=colors[0], alpha=bars_alpha, 
+                                               edgecolor=bar_edge_color, label='Frequency'))
+        else:
+            legend_elements.append(plt.Rectangle((0,0),1,1, facecolor=color1, alpha=bars_alpha, 
+                                               edgecolor=bar_edge_color, label='Frequency'))
+        
+        legend_elements.append(plt.Line2D([0], [0], color=color2, marker=marker_style, 
+                                        markersize=markersize*0.7, label='Cumulative %', linestyle=ls))
+        
+        if show_reference_lines and reference_pct is not None:
+            legend_elements.append(plt.Line2D([0], [0], color=reference_color, linestyle='--', 
+                                            alpha=reference_alpha, label=f'{reference_pct}% Rule'))
+        
+        ax.legend(handles=legend_elements, loc=legend_position, frameon=True, 
+                 fancybox=True, shadow=True, fontsize=bar_label_size*0.8)
+    
+    # Final modern styling touches
+    if modern_styling:
+        # Adjust layout
+        plt.tight_layout()
+        
+        # Add subtle shadow to bars
+        for bar in bars.patches:
+            bar.set_edgecolor(bar_edge_color)
+            bar.set_linewidth(bar_edge_width)
+    
+    return fig, (ax, ax2)
 
 
 
