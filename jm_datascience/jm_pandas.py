@@ -341,8 +341,14 @@ def petty_decimals_and_str(serie):
             if value % 1 > 0:
                 print(f"float -> {ix = } - {value = }")
 
-
-## CHARTs Functions
+#--------------------------------------------------------------------------------------------------------------------------------#
+#  CHARTs Functions:
+#--------------------------------------------------------------------------------------------------------------------------------#
+#   - Aux: get_colorblind_palette_list(), get_colors_list(),  _validate_numeric_series()
+# Common patameters for categorical charts:
+#   - data: Union[pd.Series, pd.DataFrame],     | One or two col DF. Case two cols 1se col is index (categories) and 2nd values
+#   - value_counts: Optional[bool] = False,     | You can plot native values or agregated ones by categorie
+# ...
 
 def get_colorblind_palette_list():
     """
@@ -393,7 +399,7 @@ def get_colors_list(palette: str, n: Optional[int] = 10) -> list[str]:
     return colors_list
 
 
-def _validate_categorical_parameters(
+def _validate_numeric_series(
         data: Union[pd.Series, pd.DataFrame],
         positive: Optional[bool] = True
 ) -> Union[None, Exception]:
@@ -415,9 +421,10 @@ def _validate_categorical_parameters(
             raise ValueError(f"All values in 'data' must be numeric values.")
         pass
 
-
+## OJO, acá en plt_pie TAMBIEN hay que agregar la opción value_conuts (+ mas la de labels todo externo para porciones muy chiquitas + figsize)
 def plt_pie(
     data: Union[pd.Series, pd.DataFrame],
+    value_counts: Optional[bool] = False,
     scale: Optional[int] = 2,
     title: Optional[str] = None,
     kind: Optional[str] = 'pie',
@@ -470,7 +477,7 @@ def plt_pie(
     if isinstance(data, pd.DataFrame):
         data = to_series(data)
 
-    _validate_categorical_parameters(data)
+    _validate_numeric_series(data)
     
     # Validate kind parameter
     if kind.lower() not in ['pie', 'donut']:
