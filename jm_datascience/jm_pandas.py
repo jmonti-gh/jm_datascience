@@ -318,6 +318,7 @@ def get_fdt(
             # Column that will then be concatenated to the end of the DF if the na_aside option is true
             nan_row_df = pd.DataFrame(data = [nan_value], columns=[columns[0]], index=['Nulls'])      # Only 'Frequency' column, others empty
 
+    # Central rutine: Cumulative and relative frequencies
     fdt = pd.DataFrame(sr)
     fdt.columns = [columns[0]]
     fdt[columns[1]] = fdt['Frequency'].cumsum()
