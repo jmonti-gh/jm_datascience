@@ -43,7 +43,7 @@ import seaborn as sns
 ## Claude - Qwen
 
 # An auxiliar function to change num format - OJO se puede hacer más amplia como jm_utils.jm_rchprt.fmt...
-def _fmt_value_for_pd(value, width=8, decimals=2, miles=',') -> str:
+def _fmt_value_for_pd(value, width=8, decimals=3, miles=',') -> str:
     """
     Format a value (numeric or string) into a right-aligned string of fixed width.
 
@@ -70,7 +70,8 @@ def _fmt_value_for_pd(value, width=8, decimals=2, miles=',') -> str:
         >>> format_value(9876, miles=None)
         '    9876.00'
     """
-    # Paralmeter Value validation <- vamos a tener que analizar este tema por si es un list , etc,,
+    # Parameter Value validation <- vamos a tener que analizar este tema por si es un list , etc,,
+    #   - En realidad acá tenemos que evaluar algo similar a jm_utils - fmt_values() FUTURE
     # if not isinstance(value, (int, float, np.integer, np.floating)) or pd.api.types.is_any_real_numeric_dtype(value)
 
     if not isinstance(width, int) or width <= 0:
@@ -187,19 +188,83 @@ def to_series(
 def get_fdt(
         data: Union[pd.Series, np.ndarray, dict, list, pd.DataFrame],
         value_counts: Optional[bool] = False,
+        dropna: Optional[bool] = True,
+        na_position: Optional[str] = 'last',
         pcts: Optional[bool] = True,
         plain_relatives: Optional[bool] = True,
         fmt_values: Optional[bool] = False,
         sort: Optional[str] = 'desc',
-        nans: Optional[str] = 'drop'
+        na_aside: Optional[bool] = True
 ) -> pd.DataFrame:
-    '''
-    Generata a Frequency Distribution Table (fdt)
+    """
+    Generates a Frequency Distribution Table (FDT) with absolute, relative, and cumulative frequencies.
 
-    data: puede ser ya con el value_counts() hecho o no
-    sort: 'desc', 'asc', 'ix_asc', 'ix_desc', para como queremos que sea vea el orden por valores o por indice
-    nans: 'drop', 'last', 'sort'
-    '''
+    This function converts various input data types into a structured DataFrame containing:
+    - Absolute frequencies
+    - Cumulative frequencies
+    - Relative frequencies (proportions and percentages)
+    - Cumulative relative frequencies (percentages)
+
+    Parameters:
+        data (Union[pd.Series, np.ndarray, dict, list, pd.DataFrame]): Input data.
+            If DataFrame, it will be converted to a Series using `to_series`.
+        value_counts (bool, optional): Whether to count occurrences if input is raw data.
+            Assumes data is not pre-counted. Default is False.
+        dropna (bool, optional): Whether to exclude NaN values when counting frequencies.
+            Default is True.
+        na_position (str, optional): Position of NaN values in the output:
+            - 'first': Place NaN at the top.
+            - 'last': Place NaN at the bottom (default).
+            - 'value': Keep NaN in its natural order.
+            Default is 'last'.
+        pcts (bool, optional): Whether to include percentage columns.
+            If False, only absolute and cumulative frequencies are returned.
+            Default is True.
+        plain_relatives (bool, optional): Whether to return relative and cumulative relative values.
+            If False, only frequency and percentage columns are included.
+            Default is True.
+        fmt_values (bool, optional): Whether to format numeric values using `_fmt_value_for_pd`.
+            Useful for improving readability in reports. Default is False.
+        sort (str, optional): Sort order for the output:
+            - 'asc': Sort values ascending.
+            - 'desc': Sort values descending (default).
+            - 'ix_asc': Sort by index ascending.
+            - 'ix_desc': Sort by index descending.
+            - None: No sorting.
+            Default is 'desc'.
+        na_aside (bool, optional): Whether to separate NaN values from calculations but keep them in the output.
+            If True, NaNs are added at the end and not included in cumulative or relative calculations.
+            Default is True.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing the frequency distribution table with the following columns
+        (depending on parameters):
+            - Frequency
+            - Cumulative Frequency
+            - Relative Frequency
+            - Cumulative Relative Freq.
+            - Relative Freq. [%]
+            - Cumulative Freq. [%]
+
+    Raises:
+        ValueError: If `sort` or `na_position` receive invalid values.
+
+    Notes:
+        - This function uses `to_series` to convert input data into a pandas Series.
+        - If `na_aside=True` and NaNs are present, they are placed separately and not included in relative calculations.
+        - Useful for exploratory data analysis and generating clean statistical summaries.
+
+    Example:
+        >>> import pandas as pd
+        >>> data = pd.Series(['A', 'B', 'A', 'C', 'B', 'B', None])
+        >>> fdt = get_fdt(data, sort='desc', fmt_values=True)
+        >>> print(fdt)
+              Frequency  Cumulative Frequency  Relative Freq. [%]  Cumulative Freq. [%]
+        B           3                   3                42.86                  42.86
+        A           2                   5                28.57                  71.43
+        C           1                   6                14.29                  85.71
+        Nulls       1                   7                14.29                 100.00
+    """
     columns = [
         'Frequency',
         'Cumulative Frequency',
@@ -208,12 +273,50 @@ def get_fdt(
         'Relative Freq. [%]',
         'Cumulative Freq. [%]'
     ]
+    # def _calculate_fdt_relatives(series):     # Revisar, no me gusta el flujo actual
     
     sr = to_series(data)
-    # nans = sr.isna().sum()        # FUTURE to think if nans is interesting to see here or in a pareto u other categorical chart
+    
+    if dropna:
+        sr = sr.dropna()
 
     if value_counts:
-        sr = sr.value_counts()
+        sr = sr.value_counts(dropna=dropna, sort=False)
+
+    match sort:
+        case 'asc':
+            sr = sr.sort_values()
+        case 'desc':
+            sr = sr.sort_values(ascending=False)
+        case 'ix_asc':
+            sr = sr.sort_index()
+        case 'ix_desc':
+            sr = sr.sort_index(ascending=False)
+        case None:
+            pass
+        case _:
+            raise ValueError(f"Valid values for sort: 'asc', 'desc', 'ix_asc', 'ix_desc', or None. Got '{sort}'")
+
+    try:                            # To manage when there aren't NaNs
+        nan_value = sr[np.nan]
+        sr_without_nan = sr.drop(np.nan)
+    except:
+        pass
+    else:                           # if NaNs: 1. na_position, 2 na_count
+        match na_position:          # 1. locate the NaNs values
+            case 'first':
+                sr = pd.concat([pd.Series({np.nan: nan_value}), sr_without_nan])
+            case 'last':
+                sr = pd.concat([sr_without_nan, pd.Series({np.nan: nan_value})])
+            case 'value' | None:
+                pass
+            case _:
+                raise ValueError(f"Valid values for na_position: 'first', 'last', 'value' or None. Got '{na_position}'")
+        
+        if na_aside:                # 2. define if NaNs count for relative and cumulative values.
+            sr = sr_without_nan     # series without nulls on which the relative values will be calculated
+            # Column that will then be concatenated to the end of the DF if the na_aside option is true
+            nan_row_df = pd.DataFrame(data = [nan_value], columns=[columns[0]], index=['Nulls'])      # Only 'Frequency' column, others empty
 
     fdt = pd.DataFrame(sr)
     fdt.columns = [columns[0]]
@@ -222,6 +325,9 @@ def get_fdt(
     fdt[columns[3]] = fdt['Relative Frequency'].cumsum()
     fdt[columns[4]] = fdt['Relative Frequency'] * 100
     fdt[columns[5]] = fdt['Cumulative Relative Freq.'] * 100
+
+    if na_aside and not dropna:      # We add nan_columns at the end
+        fdt = pd.concat([fdt, nan_row_df])
 
     if not pcts:                    # Don't return percentage columns
         fdt = fdt[columns[0:4]]
@@ -232,15 +338,7 @@ def get_fdt(
     if fmt_values:
         fdt = fdt.map(_fmt_value_for_pd)
         
-    match sort:
-        case 'asc':
-            return fdt.sort_values(by=columns[0])
-        case 'ix_asc':
-            return fdt.sort_index()
-        case 'ix_desc':
-            return fdt.sort_index(ascending=False)
-        case _:
-            return fdt
+    return fdt
 
 
 def describeplus(data, decimals=2, miles=',') -> pd.DataFrame:
@@ -349,8 +447,8 @@ def petty_decimals_and_str(serie):
 # Common parameters for categorical charts:
 #   - data: Union[pd.Series, pd.DataFrame], | One or two col DF. Case two cols 1se col is index (categories) and 2nd values
 #   - value_counts: Optional[bool] = False, | You can plot native values or aggregated ones by categories
-#   - scale: Optional[int] = 2,             | All sizes, widths, etc. are scaled from this number (from 1 to 9)
-#   -
+#   - scale: Optional[int] = 1,             | All sizes, widths, etc. are scaled from this number (from 1 to 9)
+#   - ...
 
 
 def get_colorblind_palette_list():
@@ -371,23 +469,12 @@ def get_colorblind_palette_list():
 def get_colors_list(palette: str, n: Optional[int] = 10) -> list[str]:
     '''
     Return a valid matplotlib palette list
-    - 'colorbind' <- daltonic, 'viridis', 'plasma', 'inferno', 'magma', 'cividis' <- daltonic, set3, set2
-    - 'Accent', 'Accent_r', 'Blues', 'Blues_r', 'BrBG', 'BrBG_r', 'BuGn', 'BuGn_r', 'BuPu', 'BuPu_r', 'CMRmap', 'CMRmap_r', 'Dark2', 'Dark2_r', 'GnBu', 'GnBu_r', 
-    'Grays', 'Grays_r', 'Greens', 'Greens_r', 'Greys', 'Greys_r', 'OrRd', 'OrRd_r', 'Oranges', 'Oranges_r', 'PRGn', 'PRGn_r', 'Paired', 'Paired_r', 'Pastel1', 
-    'Pastel1_r', 'Pastel2', 'Pastel2_r', 'PiYG', 'PiYG_r', 'PuBu', 'PuBuGn', 'PuBuGn_r', 'PuBu_r', 'PuOr', 'PuOr_r', 'PuRd', 'PuRd_r', 'Purples', 'Purples_r', 
-    'RdBu', 'RdBu_r', 'RdGy', 'RdGy_r', 'RdPu', 'RdPu_r', 'RdYlBu', 'RdYlBu_r', 'RdYlGn', 'RdYlGn_r', 'Reds', 'Reds_r', 'Set1', 'Set1_r', 'Set2', 'Set2_r', 'Set3', 
-    'Set3_r', 'Spectral', 'Spectral_r', 'Wistia', 'Wistia_r', 'YlGn', 'YlGnBu', 'YlGnBu_r', 'YlGn_r', 'YlOrBr', 'YlOrBr_r', 'YlOrRd', 'YlOrRd_r', 'afmhot', 
-    'afmhot_r', 'autumn', 'autumn_r', 'berlin', 'berlin_r', 'binary', 'binary_r', 'bone', 'bone_r', 'brg', 'brg_r', 'bwr', 'bwr_r', 'cividis', 'cividis_r', 
-    'cool', 'cool_r', 'coolwarm', 'coolwarm_r', 'copper', 'copper_r', 'cubehelix', 'cubehelix_r', 'flag', 'flag_r', 'gist_earth', 'gist_earth_r', 'gist_gray', 
-    'gist_gray_r', 'gist_grey', 'gist_grey_r', 'gist_heat', 'gist_heat_r', 'gist_ncar', 'gist_ncar_r', 'gist_rainbow', 'gist_rainbow_r', 'gist_stern', 'gist_stern_r',
-    'gist_yarg', 'gist_yarg_r', 'gist_yerg', 'gist_yerg_r', 'gnuplot', 'gnuplot2', 'gnuplot2_r', 'gnuplot_r', 'gray', 'gray_r', 'grey', 'grey_r', 'hot', 'hot_r', 
-    'hsv', 'hsv_r', 'inferno', 'inferno_r', 'jet', 'jet_r', 'magma', 'magma_r', 'managua', 'managua_r', 'nipy_spectral', 'nipy_spectral_r', 'ocean', 'ocean_r', 
-    'pink', 'pink_r', 'plasma', 'plasma_r', 'prism', 'prism_r', 'rainbow', 'rainbow_r', 'seismic', 'seismic_r', 'spring', 'spring_r', 'summer', 'summer_r', 
-    'tab10', 'tab10_r', 'tab20', 'tab20_r', 'tab20b', 'tab20b_r', 'tab20c', 'tab20c_r', 'terrain', 'terrain_r', 'turbo', 'turbo_r', 'twilight', 'twilight_r', 
-    'twilight_shifted', 'twilight_shifted_r', 'vanimo', 'vanimo_r', 'viridis', 'viridis_r', 'winter', 'winter_r'",
+    - 'colorbind', 'viridis', 'plasma', 'inferno', 'magma', 'cividis', 'set3', 'set2'
+    - 'Accent', 'Accent_r', 'Blues', 'Blues_r', 'BrBG', 'BrBG_r', 'BuGn', 'BuGn_r', 'BuPu'
+    - 'Grays', 'Grays_r', 'Greens', 'Greens_r', 'Greys', 'Greys_r', 'OrRd', 'OrRd_r',
+    - 'Pastel1_r', 'Pastel2', 'Pastel2_r', 'PiYG', 'PiYG_r', 'PuBu', 'PuBuGn', 'PuBuGn_r'
+    - 'vanimo', 'vanimo_r', 'viridis', 'viridis_r', 'winter', 'winter_r'",
     '''
-    if n < 6:       # To get a softer range of colors if n is too small           
-        n = 6
 
     if palette == 'colorblind':
         colors_list = get_colorblind_palette_list()
@@ -424,86 +511,121 @@ def _validate_numeric_series(
             raise ValueError(f"All values in 'data' must be numeric values.")
         pass
 
-## OJO, acá en plt_pie TAMBIEN hay que agregar la opción value_conuts (+ mas la de labels todo externo para porciones muy chiquitas + figsize)
+
 def plt_pie(
     data: Union[pd.Series, pd.DataFrame],
     value_counts: Optional[bool] = False,
-    scale: Optional[int] = 2,
+    sort: Optional[bool] = True,
+    nans: Optional[bool] = False,
+    scale: Optional[int] = 1,
+    figsize: Optional[tuple[float, float]] = None,
     title: Optional[str] = None,
     kind: Optional[str] = 'pie',
     label_place: Optional[str] = 'ext',
     palette: Optional[list] = 'colorblind',
     startangle: Optional[float] = -40,
-    pct_decimals: Optional[int] = 2,
+    pct_decimals: Optional[int] = 1,
     label_rotate: Optional[float] = 0,
     legend_loc: Optional[str] = 'best',
 ) -> tuple[plt.Figure, plt.Axes]:
     """
-    Generates pie or donut charts for categorical data visualization with customizable labels.
+    Generates a pie or donut chart with customizable label placement and styling.
 
     This function creates a pie or donut chart from categorical data using matplotlib.
-    It supports internal or external labels, custom palettes, and formatting options.
+    It supports internal, external, or aside label placement with optional percentage
+    and value annotations.
 
     Parameters:
-        data (pd.Series, pd.DataFrame, dict, or list): Input data. If a list is provided,
-            frequencies are counted automatically.
-        scale (int): Chart scaling factor (1 to 6). Default is 2.
-        title (str or None): Optional title for the chart.
-        kind (str): Type of chart: 'pie' or 'donut'. Default is 'pie'.
-        label_place (str): Placement of labels: 'ext' (external) or 'int' (internal).
-        palette (list of str or None): List of color hex codes for categories.
-        startangle (float): Starting angle in degrees for the first wedge.
-        pct_decimals (int): Number of decimal places for percentage labels. Default is 2.
-        label_rotate (float): Rotation angle for internal labels. Default is 0.
-        legend_loc (str): Position of the legend ('best', 'upper right', etc.). Default is 'best'.
+        data (Union[pd.Series, np.ndarray, dict, list, set, pd.DataFrame],):
+            Input data be converted to a Series using `to_series`.
+        value_counts (bool, optional): If True, counts occurrences of each category.
+            Default is False.
+        sort (bool, optional): If True and `value_counts=True`, sorts categories by frequency.
+            Default is True.
+        nans (bool, optional): If True, includes NaN values in the count. Default is False.
+        scale (int, optional): Chart scaling factor (1 to 9). Affects figure size and font sizes.
+            Default is 1.
+        figsize (tuple, optional): Width and height of the figure in inches. Overrides `scale`.
+            Default is None.
+        title (str, optional): Chart title. If not provided, a default title is used.
+        kind (str, optional): Type of chart to generate. Options:
+            - 'pie': standard pie chart.
+            - 'donut': donut chart with a hollow center.
+        label_place (str, optional): Placement of labels. Options:
+            - 'ext': external labels connected by arrows.
+            - 'int': internal labels within each segment (shows absolute values and percentages).
+            - 'aside': internal labels and a legend with extended labels on the side.
+        palette (list or str, optional): Color palette for segments. If a string, uses a predefined
+            palette (e.g., 'set2' or 'viridis'). Default is 'colorblind'.
+        startangle (float, optional): Starting angle (in degrees) for the first wedge.
+            Default is -40.
+        pct_decimals (int, optional): Number of decimal places to display in percentage values.
+            Default is 1.
+        label_rotate (float, optional): Rotation angle for internal labels (only applies if
+            `label_place='int'`). Default is 0.
+        legend_loc (str, optional): Position of the legend (if displayed). See valid options in
+            `matplotlib.legend`. Default is 'best'.
 
     Returns:
-        tuple[matplotlib.figure.Figure, matplotlib.axes.Axes]: The Figure and Axes objects
-            for further customization.
+        tuple[plt.Figure, plt.Axes]: A tuple containing:
+            - fig: The Matplotlib Figure object.
+            - ax: The Matplotlib Axes object for further customization.
 
     Raises:
-        ValueError: If data contains invalid values, if unsupported types are passed,
-            if more than 9 categories are used, or if parameters like scale are out of range.
-        TypeError: If data is not one of the accepted types.
+        TypeError: If input data is not a pandas Series or DataFrame.
+        ValueError: If `kind` is not 'pie' or 'donut'.
+        ValueError: If more than 12 categories are provided.
+        ValueError: If `scale` is not between 1 and 9.
 
-    Examples:
+    Notes:
+        - This function uses `to_series` to convert DataFrame or other data types into a Series.
+        - It supports rich annotations and color palettes for better visual clarity.
+        - Maximum of 12 categories allowed for readability.
+
+    Example:
         >>> import pandas as pd
-        >>> data = pd.Series([25, 30, 20, 15, 10], index=['A', 'B', 'C', 'D', 'E'])
-        >>> fig, ax = plt_pie(data, kind='donut', title='Donut Distribution')
-        >>> plt.show()
-
-        >>> data_list = ['A', 'B', 'A', 'C', 'B', 'B']
-        >>> fig, ax = plt_pie(data_list, kind='pie', label_place='int')
+        >>> data = pd.Series(['A', 'B', 'A', 'C', 'B', 'B', 'A', 'A', 'B', 'C'])
+        >>> fig, ax = plt_pie3(data, kind='donut', label_place='aside', title='Distribution of Categories')
         >>> plt.show()
     """
-    # Convert to serie en case of DF
-    if isinstance(data, pd.DataFrame):
-        data = to_series(data)
 
-    _validate_numeric_series(data)
-    
+    # Convert to serie in case of np.ndarray, dict, list, set, pd.DataFrame
+    sr = to_series(data)
+
+    if value_counts:
+        sr = sr.value_counts(sort=sort, dropna=not nans)
+
+    _validate_numeric_series(sr)
+
     # Validate kind parameter
     if kind.lower() not in ['pie', 'donut']:
         raise ValueError(f"Invalid 'kind' parameter: '{kind}'. Must be 'pie' or 'donut'.")
     
     # Validate maximum categories
-    if len(data) > 9:
-        raise ValueError(f"Data contains {len(data)} categories. "
-                        "Maximum allowed is 9 categories.")
+    if len(sr) > 12:
+        raise ValueError(f"Data contains {len(sr)} categories. "
+                        "Maximum allowed is 12 categories.")
     
-    # Build graphs size, and fonts size from scale, and validate scale from 1 to 6.
+    # Build graphs size, and fonts size from scale, and validate scale from 1 to 9.
     if scale < 1 or scale > 9:
-        raise ValueError(f"[ERROR] Invalid 'scale' value. Must between '1' and '6', not '{scale}'.")
+        raise ValueError(f"[ERROR] Invalid 'scale' value. Must between '1' and '9', not '{scale}'.")
     else:
         scale = round(scale)
 
-    multiplier, w_base, h_base  = 1.33333334 ** scale, 4.45, 2.25
-    width, high= w_base * multiplier, h_base * multiplier
+    # Calculate figure dimensions
+    if figsize is None:
+        multiplier = scale + 7.5
+        w_base, h_base = 1, 0.56
+        width, height = w_base * multiplier, h_base * multiplier
+        figsize = (width, height)
+    else:
+        width, height = figsize
+    
+    # Calculate font sizes based on figure width
     label_size = width * 1.25
-    title_size = label_size * 1.25
+    title_size = width * 1.57
 
     # Base fig definitions
-    figsize = (width, high)
     fig, ax = plt.subplots(figsize=figsize, subplot_kw=dict(aspect="equal"))
 
     # Configure wedge properties for donut  or pie chart
@@ -514,19 +636,19 @@ def plt_pie(
         wedgeprops = {'edgecolor': 'white', 'linewidth': 0.5}
 
     # Define colors
-    color_palette = get_colors_list(palette, len(data))
+    color_palette = get_colors_list(palette, len(sr))
 
     if label_place == 'ext':
 
-        wedges, texts = ax.pie(data, wedgeprops=wedgeprops, colors=color_palette, startangle=startangle)
+        wedges, texts = ax.pie(sr, wedgeprops=wedgeprops, colors=color_palette, startangle=startangle)
 
         bbox_props = dict(boxstyle="square,pad=0.3", fc="w", ec="k", lw=0.72)
         kw = dict(arrowprops=dict(arrowstyle="-"), bbox=bbox_props, zorder=0, va="center")
 
         # Build the labels. Annotations and legend in same label (External)
         labels = [
-            f"{data.loc[data == value].index[0]}\n{value}\n({round(value / data.sum() * 100, pct_decimals)} %)"
-            for value in data.values
+            f"{sr.loc[sr == value].index[0]}\n{value}\n({round(value / sr.sum() * 100, pct_decimals)} %)"
+            for value in sr.values
         ]
         
         # Draw the annotations (labels)
@@ -540,27 +662,37 @@ def plt_pie(
             ax.annotate(labels[i], xy=(x, y), xytext=(1.35*np.sign(x), 1.4*y),
                     horizontalalignment=horizontalalignment, fontsize=label_size, **kw)
             
-    elif label_place == 'int':
-        # I have to change the fontsize for internal annotations
+    elif label_place == 'int' or label_place == 'aside':
         label_size = label_size * 0.8
         legend_size = label_size * 1.1
-
-        # autopct for internal annotations. A funtion to show both: absolute an pcts.
-        format_string = f'%.{pct_decimals}f%%'
-
-        def make_autopct(values, fmt_str):
-            value_iterator = iter(values)
-            
-            def my_autopct(pct):
-                absolute_value = next(value_iterator)
-                percentage_string = fmt_str % pct
-                return f"{absolute_value}\n({percentage_string})"  
-            
-            return my_autopct
         
-        autopct_function = make_autopct(data.values, format_string)
-        
-        ax.pie(x=data,
+        # Set autopct and legends, different for 'int' and 'aside' label_place
+        if label_place == 'int':
+            # autopct for internal annotations. A funtion to show both: absolute an pcts.
+            format_string = f'%.{pct_decimals}f%%'
+
+            def _make_autopct(values, fmt_str):     # A python Closuer
+                value_iterator = iter(values)
+                
+                def my_autopct(pct):
+                    absolute_value = next(value_iterator)
+                    percentage_string = fmt_str % pct
+                    return f"{absolute_value}\n({percentage_string})"  
+                
+                return my_autopct
+            
+            autopct_function = _make_autopct(sr.values, format_string)
+
+            legends = sr.index
+
+        else:                           # elif aside:  Valid autopct and legends in case of 'aside' label_place
+            autopct_function = None     # No data inside de pie or donut
+            # Custom legends w/labels values and pct aside of the pie or donut
+            total = sr.values.sum()         
+            legends = [f"{sr.index[i]} \n| {value} | {round(value / total * 100, pct_decimals)} %"
+                    for i, value in enumerate(sr.values)] 
+
+        ax.pie(x=sr,
             colors=color_palette,
             startangle=startangle,
             autopct=autopct_function,
@@ -570,17 +702,17 @@ def plt_pie(
                         'rotation': label_rotate,
                         'weight': 'bold'})
         
-        ax.legend(data.index,
+        ax.legend(legends,
                 loc=legend_loc,
                 bbox_to_anchor=(1, 0, 0.2, 1),
                 prop={'size': legend_size})
 
     else:
-        raise ValueError(f"Invalid labe_place parameter. Must be 'ext' or 'int', not '{label_place}'.")
+        raise ValueError(f"Invalid labe_place parameter. Must be 'ext', 'int' or 'aside', not '{label_place}'.")
             
     # Build title
     if not title:
-        title = f"Pie/Donut Chart - ({data.name})"
+        title = f"Pie/Donut Chart - ({sr.name})"
     ax.set_title(title, fontdict={'size': title_size, 'weight': 'bold'})
 
     return fig, ax
