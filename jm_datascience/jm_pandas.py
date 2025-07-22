@@ -32,7 +32,7 @@ __last_modified__ = "2025-06-30"
 
 
 ## Standard Libs
-from typing import Union, Optional, Any, Literal
+from typing import Union, Optional, Any, Literal, Sequence, TypeAlias
 
 # Third-Party Libs
 import numpy as np
@@ -42,8 +42,13 @@ from matplotlib.ticker import PercentFormatter  # for pareto chart and ?
 import seaborn as sns
 ## Claude - Qwen
 
+
+## Custom types for non-included typing annotations - Grok
+IndexElement: TypeAlias = Union[str, int, float, 'datetime.datetime', pd.Timestamp]
+
+
 # An auxiliar function to change num format - OJO se puede hacer más amplia como jm_utils.jm_rchprt.fmt...
-def _fmt_value_for_pd(value, width=8, decimals=3, miles=',') -> str:
+def _fmt_value_for_pd(value, width=8, n_decimals=3, thousands_sep=',') -> str:
     """
     Format a value (numeric or string) into a right-aligned string of fixed width.
 
@@ -80,25 +85,25 @@ def _fmt_value_for_pd(value, width=8, decimals=3, miles=',') -> str:
     if not isinstance(decimals, int) or decimals < 0:
         raise ValueError(f"Decimals must be a non-negative integer. Not '{decimals}")
     
-    if miles not in [',', '_', None]:
-        raise ValueError(f"Miles must be either ',', '_', or None. Not '{miles}")
+    if thousands_sep not in [',', '_', None]:
+        raise ValueError(f"Miles must be either ',', '_', or None. Not '{thousands_sep}")
     
     try:
-        num = float(value)                                  # Convert to float if possible
-        if num % 1 == 0:                                    # it its a total integer number
+        num = float(value)                                          # Convert to float if possible
+        if num % 1 == 0:                                            # it its a total integer number
             decimals = 0
-        if miles:
-            return f"{num:>{width}{miles}.{decimals}f}"     # Ancho fijo, x decimales, alineado a la derecha
+        if thousands_sep:
+            return f"{num:>{width}{thousands_sep}.{n_decimals}f}"   # Fixed width, 'x' decimal places, right aligned
         else:
-            return f"{num:>{width}.{decimals}f}"
+            return f"{num:>{width}.{n_decimals}f}"
         
     except (ValueError, TypeError):
-        return str(value).rjust(width)                      # Alinea también strings, para mantener la grilla
+        return str(value).rjust(width)                              # Also align strings, to maintain the grid
 
 
 def to_series(
     data: Union[pd.Series, np.ndarray, dict, list, set, pd.DataFrame],
-    index: Optional[pd.Index] = None,
+    index: Optional[Union[pd.Index, Sequence[Union[str, int, float, 'datetime.datetime']], np.ndarray]] = None,
     name: Optional[str] = None
 ) -> pd.Series:
     """
@@ -186,7 +191,7 @@ def to_series(
                       
 # Create a complete frecuency distribution table fron a categorical data
 def get_fdt(
-        data: Union[pd.Series, np.ndarray, dict, list, pd.DataFrame],
+        data: Union[pd.Series, np.ndarray, dict, list, set, pd.DataFrame],
         value_counts: Optional[bool] = False,
         dropna: Optional[bool] = True,
         na_position: Optional[str] = 'last',
