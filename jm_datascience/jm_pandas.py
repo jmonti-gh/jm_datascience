@@ -43,8 +43,9 @@ import seaborn as sns
 ## Claude - Qwen
 
 
-## Custom types for non-included typing annotations - Grok
-IndexElement: TypeAlias = Union[str, int, float, 'datetime.datetime', pd.Timestamp]
+## Custom types for non-included typing annotations
+IndexElement: TypeAlias = Union[str, int, float, pd.Timestamp]
+# IndexElement: TypeAlias = Union[str, int, float, 'datetime.datetime', np.str_, np.int64, np.float64, np.datetime64, pd.Timestamp, ...]
 
 
 # An auxiliar function to change num format - OJO se puede hacer más amplia como jm_utils.jm_rchprt.fmt...
@@ -103,60 +104,65 @@ def _fmt_value_for_pd(value, width=8, n_decimals=3, thousands_sep=',') -> str:
 
 def to_series(
     data: Union[pd.Series, np.ndarray, dict, list, set, pd.DataFrame],
-    index: Optional[Union[pd.Index, Sequence[Union[str, int, float, 'datetime.datetime']], np.ndarray]] = None,
+    index: Optional[Union[pd.Index, Sequence[IndexElement]]] = None,
     name: Optional[str] = None
 ) -> pd.Series:
     """
-    Converts input data into a pandas Series, optionally returning value counts.
+    Converts input data into a pandas Series with optional custom index and name.
 
-    This function accepts various data types and converts them into a pandas Series.
-    If `count=True`, it returns the frequency count of the values in the resulting Series.
+    This function standardizes various data types into a pandas Series. It supports
+    arrays, dictionaries, lists, sets, DataFrames, and existing Series. Optionally,
+    a custom index or series name can be assigned.
 
     Parameters:
         data (Union[pd.Series, np.ndarray, dict, list, set, pd.DataFrame]):
-            The input data to convert. Supported types include:
-            - pd.Series: returned as-is or counted if `count=True`.
+            Input data to convert. Supported types:
+            - pd.Series: returned as-is (can be overridden with new index/name).
             - np.ndarray: flattened and converted to a Series.
-            - dict: keys become the index, values are used for data.
-            - list or set: converted directly to a Series.
+            - dict: keys become the index, values become the data.
+            - list or set: converted to a Series with default integer index.
             - pd.DataFrame:
                 - 1 column: converted directly to a Series.
                 - 2 columns: first column becomes the index, second becomes the values.
-
-        count (bool or int, optional): Whether to return value counts instead of raw data.
-            If True or 1, returns frequencies of each value. Default is False.
+        index (Union[pd.Index, Sequence], optional): Custom index to assign to the Series.
+            If provided, overrides the original index. Default is None.
+        name (str, optional): Name to assign to the Series. Default is None.
 
     Returns:
-        pd.Series: A pandas Series representing the input data. If `count=True`, returns
-            the value counts of the data.
+        pd.Series: A pandas Series constructed from the input data, with optional
+            custom index and name.
 
     Raises:
-        TypeError: If `data` is not one of the supported types.
-        ValueError: If `count` is not a boolean or integer 0/1.
-        ValueError: If DataFrame has more than 2 columns.
+        TypeError: If the input data type is not supported.
+        ValueError: If the DataFrame has more than 2 columns.
 
     Examples:
         >>> import pandas as pd
-        >>> to_serie_with_count([1, 2, 2, 3])
+        >>> to_series([1, 2, 3, 4])
         0    1
         1    2
-        2    2
-        3    3
+        2    3
+        3    4
         dtype: int64
 
-        >>> to_serie_with_count([1, 2, 2, 3], count=True)
-        2    2
-        1    1
-        3    1
-        dtype: int64
-
-        >>> df = pd.DataFrame({'Category': ['A', 'B', 'A'], 'Value': [10, 20, 30]})
-        >>> to_serie_with_count(df)
-        Category
+        >>> to_series({'A': 10, 'B': 20, 'C': 30})
         A    10
         B    20
-        A    30
+        C    30
+        dtype: int64
+
+        >>> df = pd.DataFrame({'Label': ['X', 'Y'], 'Value': [100, 200]})
+        >>> to_series(df)
+        Label
+        X    100
+        Y    200
         Name: Value, dtype: int64
+
+        >>> to_series([10, 20, 30], index=['a', 'b', 'c'], name='Measurements')
+        a    10
+        b    20
+        c    30
+        Name: Measurements, dtype: int64
     """
     
     # Validate parameters - FUTURE
@@ -168,7 +174,7 @@ def to_series(
     elif isinstance(data, (dict, list)):
         series = pd.Series(data)
     elif isinstance(data, (set)):
-        series = pd.Series(tuple(data))
+        series = pd.Series(list(data))
     elif isinstance(data, pd.DataFrame):
         if data.shape[1] == 1:                      # Also len(data.columns == 1)
             series = data.iloc[:, 0]
@@ -195,10 +201,10 @@ def get_fdt(
         value_counts: Optional[bool] = False,
         dropna: Optional[bool] = True,
         na_position: Optional[str] = 'last',
-        pcts: Optional[bool] = True,
-        plain_relatives: Optional[bool] = True,
+        include_pcts: Optional[bool] = True,
+        include_plain_relatives: Optional[bool] = True,
         fmt_values: Optional[bool] = False,
-        sort: Optional[str] = 'desc',
+        order: Optional[str] = 'desc',
         na_aside: Optional[bool] = True
 ) -> pd.DataFrame:
     """
@@ -222,15 +228,15 @@ def get_fdt(
             - 'last': Place NaN at the bottom (default).
             - 'value': Keep NaN in its natural order.
             Default is 'last'.
-        pcts (bool, optional): Whether to include percentage columns.
+        include_pcts (bool, optional): Whether to include percentage columns.
             If False, only absolute and cumulative frequencies are returned.
             Default is True.
-        plain_relatives (bool, optional): Whether to return relative and cumulative relative values.
+        include_plain_relatives (bool, optional): Whether to return relative and cumulative relative values.
             If False, only frequency and percentage columns are included.
             Default is True.
         fmt_values (bool, optional): Whether to format numeric values using `_fmt_value_for_pd`.
             Useful for improving readability in reports. Default is False.
-        sort (str, optional): Sort order for the output:
+        order (str, optional): Sort order for the output:
             - 'asc': Sort values ascending.
             - 'desc': Sort values descending (default).
             - 'ix_asc': Sort by index ascending.
@@ -288,7 +294,8 @@ def get_fdt(
     if value_counts:
         sr = sr.value_counts(dropna=dropna, sort=False)
 
-    match sort:
+    # Order de original Series to obtain the fdt in the same order as the original data
+    match order:
         case 'asc':
             sr = sr.sort_values()
         case 'desc':
@@ -300,30 +307,32 @@ def get_fdt(
         case None:
             pass
         case _:
-            raise ValueError(f"Valid values for sort: 'asc', 'desc', 'ix_asc', 'ix_desc', or None. Got '{sort}'")
+            raise ValueError(f"Valid values for order: 'asc', 'desc', 'ix_asc', 'ix_desc', or None. Got '{order}'")
 
-    try:                            # To manage when there aren't NaNs
-        nan_value = sr[np.nan]
-        sr_without_nan = sr.drop(np.nan)
-    except:
-        pass
-    else:                           # if NaNs: 1. na_position, 2 na_count
-        match na_position:          # 1. locate the NaNs values
-            case 'first':
-                sr = pd.concat([pd.Series({np.nan: nan_value}), sr_without_nan])
-            case 'last':
-                sr = pd.concat([sr_without_nan, pd.Series({np.nan: nan_value})])
-            case 'value' | None:
-                pass
-            case _:
-                raise ValueError(f"Valid values for na_position: 'first', 'last', 'value' or None. Got '{na_position}'")
-        
-        if na_aside:                # 2. define if NaNs count for relative and cumulative values.
-            sr = sr_without_nan     # series without nulls on which the relative values will be calculated
-            # Column that will then be concatenated to the end of the DF if the na_aside option is true
-            nan_row_df = pd.DataFrame(data = [nan_value], columns=[columns[0]], index=['Nulls'])      # Only 'Frequency' column, others empty
+    # Handle NaN values (if any)
+    if sr.isnull().any():
+        try:                            # To manage when there aren't NaNs
+            nan_value = sr[np.nan]
+            sr_without_nan = sr.drop(np.nan)
+        except:
+            pass
+        else:                           # if NaNs: 1. na_position, 2 na_aside
+            match na_position:          # 1. locate the NaNs values
+                case 'first':
+                    sr = pd.concat([pd.Series({np.nan: nan_value}), sr_without_nan])
+                case 'last':
+                    sr = pd.concat([sr_without_nan, pd.Series({np.nan: nan_value})])
+                case 'value' | None:
+                    pass
+                case _:
+                    raise ValueError(f"Valid values for na_position: 'first', 'last', 'value' or None. Got '{na_position}'")
+            
+            if na_aside:                # 2. define if NaNs count for relative and cumulative values.
+                sr = sr_without_nan     # series without nulls on which the relative values will be calculated
+                # Column that will then be concatenated to the end of the DF if the na_aside option is true
+                nan_row_df = pd.DataFrame(data = [nan_value], columns=[columns[0]], index=['Nulls'])      # Only 'Frequency' column.
 
-    # Central rutine: Cumulative and relative frequencies
+    # Central rutine: create the fdt, including relative and cumulative columns.
     fdt = pd.DataFrame(sr)
     fdt.columns = [columns[0]]
     fdt[columns[1]] = fdt['Frequency'].cumsum()
@@ -332,13 +341,13 @@ def get_fdt(
     fdt[columns[4]] = fdt['Relative Frequency'] * 100
     fdt[columns[5]] = fdt['Cumulative Relative Freq.'] * 100
 
-    if na_aside and not dropna:      # We add nan_columns at the end
+    if na_aside and not dropna:             # We add nan_columns at the end
         fdt = pd.concat([fdt, nan_row_df])
 
-    if not pcts:                    # Don't return percentage columns
+    if not include_pcts:                    # Don't return percentage columns
         fdt = fdt[columns[0:4]]
     
-    if not plain_relatives:         # Don't return relative and plain cumulative
+    if not include_plain_relatives:         # Don't return relative and plain cumulative
         fdt = fdt[[columns[0], columns[4], columns[5]]]
 
     if fmt_values:
