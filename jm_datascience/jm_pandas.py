@@ -307,9 +307,8 @@ def get_fdt(
         'Relative Freq. [%]',
         'Cumulative Freq. [%]'
     ]
-    # def _calculate_fdt_relatives(series):     # Revisar, no me gusta el flujo actual
-    
-    sr = to_series(data)
+   
+    sr = to_series(data)                        # Convert the input data to a pd.Series
     
     if dropna:
         sr = sr.dropna()                        # Drop all nulls values of the Series
@@ -318,10 +317,9 @@ def get_fdt(
     if value_counts:
         sr = sr.value_counts(dropna=dropna, sort=False)
 
-    # Validate that all the values are positive numbers
-    _validate_numeric_series(sr)
+    _validate_numeric_series(sr)                # Validate that all the values are positive numbers
 
-    # Get the index name or use 'Index' if None - will use it later to set the index name in concat cases
+    # Get the index name or use 'Index' if None - will use it later to set the index name in pd.concat cases
     sr_ixname = sr.index.name if sr.index.name else 'Index'
 
     # Order de original Series to obtain the fdt in the same order as the original data
