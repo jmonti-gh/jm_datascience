@@ -102,6 +102,29 @@ def _fmt_value_for_pd(value, width=8, n_decimals=3, thousands_sep=',') -> str:
         return str(value).rjust(width)                              # Also align strings, to maintain the grid
 
 
+def _validate_numeric_series(
+        pd_data: Union[pd.Series, pd.DataFrame],
+        positive: Optional[bool] = True
+) -> Union[None, Exception]:
+
+    # Validate data parameter a pandas object
+    if not isinstance(pd_data, (pd.Series, pd.DataFrame)):     # pd.Series or pd.Datafram
+        raise TypeError(
+            f"Input data must be a pandas Series or DataFrame. Got {type(pd_data)} instead."
+        )
+              
+    if positive:
+        if not all(                                             # Only positve numeric values
+            isinstance(val, (int, float, np.integer, np.floating)) and val > 0 for val in pd_data.values
+        ):
+            raise ValueError(f"All values in the data must be positive numeric..")
+        pass
+    else:                                                       # Just only numeric values
+        if not all(isinstance(val, (int, float, np.integer, np.floating)) for val in pd_data.values):
+            raise ValueError(f"All values in the data must be numeric values.")
+        pass
+
+
 def to_series(
     data: Union[pd.Series, np.ndarray, dict, list, set, pd.DataFrame],
     index: Optional[Union[pd.Index, Sequence[IndexElement]]] = None,
@@ -195,7 +218,6 @@ def to_series(
     return series
 
                       
-# Create a complete frecuency distribution table fron a categorical data
 def get_fdt(
         data: Union[pd.Series, np.ndarray, dict, list, set, pd.DataFrame],
         value_counts: Optional[bool] = False,
@@ -205,10 +227,11 @@ def get_fdt(
         include_plain_relatives: Optional[bool] = True,
         fmt_values: Optional[bool] = False,
         order: Optional[str] = 'desc',
-        na_aside: Optional[bool] = True
+        na_aside_calc: Optional[bool] = True
 ) -> pd.DataFrame:
     """
     Generates a Frequency Distribution Table (FDT) with absolute, relative, and cumulative frequencies.
+        Handles NaN values and allows for various configurations
 
     This function converts various input data types into a structured DataFrame containing:
     - Absolute frequencies
@@ -243,7 +266,7 @@ def get_fdt(
             - 'ix_desc': Sort by index descending.
             - None: No sorting.
             Default is 'desc'.
-        na_aside (bool, optional): Whether to separate NaN values from calculations but keep them in the output.
+        na_aside_calc (bool, optional): Whether to separate NaN values from calculations but keep them in the output.
             If True, NaNs are added at the end and not included in cumulative or relative calculations.
             Default is True.
 
@@ -289,10 +312,17 @@ def get_fdt(
     sr = to_series(data)
     
     if dropna:
-        sr = sr.dropna()
+        sr = sr.dropna()                        # Drop all nulls values of the Series
+        sr = sr.drop(np.nan, errors='ignore')   # For series with NaNs as a category with their count (errors='ignore': does not fail if it does not exist)
 
     if value_counts:
         sr = sr.value_counts(dropna=dropna, sort=False)
+
+    # Validate that all the values are positive numbers
+    _validate_numeric_series(sr)
+
+    # Get the index name or use 'Index' if None - will use it later to set the index name in concat cases
+    sr_ixname = sr.index.name if sr.index.name else 'Index'
 
     # Order de original Series to obtain the fdt in the same order as the original data
     match order:
@@ -308,29 +338,33 @@ def get_fdt(
             pass
         case _:
             raise ValueError(f"Valid values for order: 'asc', 'desc', 'ix_asc', 'ix_desc', or None. Got '{order}'")
+        
+    # Handle NaNs values. Two cases: 1. na_aside: don't use for calcs and at the end; 2. use for calcs and locate according na_position
+    #   - Determine the number of nans
+    if pd.isna(sr.index).any():
+        n_nans = sr[np.nan]
+    else:
+        n_nans = 0
 
-    # Handle NaN values (if any)
-    if sr.isnull().any():
-        try:                            # To manage when there aren't NaNs
-            nan_value = sr[np.nan]
-            sr_without_nan = sr.drop(np.nan)
-        except:
-            pass
-        else:                           # if NaNs: 1. na_position, 2 na_aside
-            match na_position:          # 1. locate the NaNs values
-                case 'first':
-                    sr = pd.concat([pd.Series({np.nan: nan_value}), sr_without_nan])
-                case 'last':
-                    sr = pd.concat([sr_without_nan, pd.Series({np.nan: nan_value})])
-                case 'value' | None:
-                    pass
-                case _:
-                    raise ValueError(f"Valid values for na_position: 'first', 'last', 'value' or None. Got '{na_position}'")
-            
-            if na_aside:                # 2. define if NaNs count for relative and cumulative values.
-                sr = sr_without_nan     # series without nulls on which the relative values will be calculated
-                # Column that will then be concatenated to the end of the DF if the na_aside option is true
-                nan_row_df = pd.DataFrame(data = [nan_value], columns=[columns[0]], index=['Nulls'])      # Only 'Frequency' column.
+    #   - Locale NaNs row in the Series 'sr'
+    if na_aside_calc:
+        sr = sr.drop(np.nan, errors='ignore')                   # Drop NaNs from the Series for calculations
+        # Column that will then be concatenated to the end of the DF - Only 'Frequency' column, no calculated columns
+        nan_row_df = pd.DataFrame(data = [n_nans], columns=[columns[0]], index=[np.nan])
+    else:
+        # As we use NaNs for calculations decide where locate these values
+        sr_without_nan = sr.drop(np.nan, errors='ignore')       # Aux. sr wo/nans allow us to locate the NaNs
+        match na_position:             
+            case 'first':
+                sr = pd.concat([pd.Series({np.nan: n_nans}), sr_without_nan])
+                sr.index.name = sr_ixname       # Set the index name to the Series
+            case 'last':
+                sr = pd.concat([sr_without_nan, pd.Series({np.nan: n_nans})])
+                sr.index.name = sr_ixname       # Set the index name to the Series
+            case 'value' | None:
+                pass                # Locates the Nulls row based on the value or index ordering
+            case _:
+                raise ValueError(f"Valid values for na_position: 'first', 'last', 'value' or None. Got '{na_position}'")
 
     # Central rutine: create the fdt, including relative and cumulative columns.
     fdt = pd.DataFrame(sr)
@@ -341,13 +375,14 @@ def get_fdt(
     fdt[columns[4]] = fdt['Relative Frequency'] * 100
     fdt[columns[5]] = fdt['Cumulative Relative Freq.'] * 100
 
-    if na_aside and not dropna:             # We add nan_columns at the end
+    if na_aside_calc and not dropna:            # We add nan_columns at the end
         fdt = pd.concat([fdt, nan_row_df])
+        fdt.index.name = sr_ixname              # Set the index name to the DataFrame
 
-    if not include_pcts:                    # Don't return percentage columns
+    if not include_pcts:                        # Don't return percentage columns
         fdt = fdt[columns[0:4]]
     
-    if not include_plain_relatives:         # Don't return relative and plain cumulative
+    if not include_plain_relatives:             # Don't return relative and plain cumulative
         fdt = fdt[[columns[0], columns[4], columns[5]]]
 
     if fmt_values:
@@ -440,15 +475,15 @@ def clean_df(df):
     return df_clean
 
 
-def is_mostly_numeric(serie, threshold):
+def is_mostly_numeric(series, threshold):
     ''' Checks if at least 'threshold'% of the values ​​can be numeric'''
-    converted = pd.to_numeric(serie, errors='coerce')
-    numeric_ratio = converted.notna().sum() / len(serie)
+    converted = pd.to_numeric(series, errors='coerce')
+    numeric_ratio = converted.notna().sum() / len(series)
     return numeric_ratio >= threshold
 
 
-def petty_decimals_and_str(serie):
-    for ix, value in serie.items():
+def petty_decimals_and_str(series):
+    for ix, value in series.items():
         if isinstance(value, str):
             print(f"String -> {ix = } - {value = }")
         elif isinstance(value, float):
@@ -481,7 +516,7 @@ def get_colorblind_palette_list():
     ]
 
 
-def get_colors_list(palette: str, n: Optional[int] = 10) -> list[str]:
+def get_colors_list(palette: str, n_items: Optional[int] = 10) -> list[str]:
     '''
     Return a valid matplotlib palette list
     - 'colorbind', 'viridis', 'plasma', 'inferno', 'magma', 'cividis', 'set3', 'set2'
@@ -494,44 +529,21 @@ def get_colors_list(palette: str, n: Optional[int] = 10) -> list[str]:
     if palette == 'colorblind':
         colors_list = get_colorblind_palette_list()
     elif palette == 'set2':
-        colors_list = plt.cm.Set2(np.linspace(0, 1, n))
+        colors_list = plt.cm.Set2(np.linspace(0, 1, n_items))
     elif palette == 'set3':
-        colors_list = plt.cm.Set3(np.linspace(0, 1, n))
+        colors_list = plt.cm.Set3(np.linspace(0, 1, n_items))
     else:
-        cmap = plt.get_cmap(palette, n)              # Use palette colormap
-        colors_list = [cmap(i) for i in range(n)]    # Get colors from the colormap
+        cmap = plt.get_cmap(palette, n_items)              # Use palette colormap
+        colors_list = [cmap(i) for i in range(n_items)]    # Get colors from the colormap
 
     return colors_list
 
 
-def _validate_numeric_series(
-        data: Union[pd.Series, pd.DataFrame],
-        positive: Optional[bool] = True
-) -> Union[None, Exception]:
-
-    # Validate data parameter a pandas object
-    if not isinstance(data, (pd.Series, pd.DataFrame)):     # pd.Series or pd.Datafram
-        raise TypeError(
-            f"Input data must be a pandas Series or DataFrame. Got {type(data)} instead."
-        )
-              
-    if positive:
-        if not all(                                             # Only positve numeric values                 
-            isinstance(val, (int, float, np.integer, np.floating)) and val > 0 for val in data.values
-        ):
-            raise ValueError(f"All values in 'data' must be positive numeric values.")
-        pass
-    else:                                                       # Just only numeric values
-        if not all(isinstance(val, (int, float, np.integer, np.floating)) for val in data.values):
-            raise ValueError(f"All values in 'data' must be numeric values.")
-        pass
-
-
 def plt_pie(
-    data: Union[pd.Series, pd.DataFrame],
+    data: Union[pd.Series, np.ndarray, dict, list, set, pd.DataFrame],
     value_counts: Optional[bool] = False,
     sort: Optional[bool] = True,
-    nans: Optional[bool] = False,
+    dropna: Optional[bool] = True,
     scale: Optional[int] = 1,
     figsize: Optional[tuple[float, float]] = None,
     title: Optional[str] = None,
@@ -604,11 +616,18 @@ def plt_pie(
         >>> plt.show()
     """
 
-    # Convert to serie in case of np.ndarray, dict, list, set, pd.DataFrame
+    # Convert to serie in case of np.ndarray, dict, list, set, or pd.DataFrame
     sr = to_series(data)
+    n_nans = sr.isna().sum()                    # original number of nans, for statistical subtitle info
+
+    if dropna:
+        sr = sr.dropna()                        # Drop NaN values if dropna is True
+        total_label = 'Total (without Nulls):'  # for statistical subtitle info
+    else:
+        total_label = 'Total (with Nulls):'
 
     if value_counts:
-        sr = sr.value_counts(sort=sort, dropna=not nans)
+        sr = sr.value_counts(sort=sort, dropna=dropna)
 
     _validate_numeric_series(sr)
 
@@ -728,7 +747,17 @@ def plt_pie(
     # Build title
     if not title:
         title = f"Pie/Donut Chart - ({sr.name})"
+
+    # Enhanced subtitle with statistics
+    total_items = sr.sum()                  # Total items in the series
+    n_categories = len(sr)                  # len(categories)
+    top_2_pct = (sr.head(2).sum() / total_items * 100) if n_categories >= 3 else (sr.sum() / total_items * 100)
+
+    subtitle = f"{total_label} {total_items:,} | Categories: {n_categories} | Top 2: {top_2_pct:.1f}% | Nulls: {n_nans}"
+
+    # Set the title and subtitle
     ax.set_title(title, fontdict={'size': title_size, 'weight': 'bold'})
+    ax.text(0, 1.18, subtitle, ha='center', va='center', fontsize=title_size * 0.6, color='dimgray')
 
     return fig, ax
 
