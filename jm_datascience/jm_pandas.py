@@ -511,11 +511,10 @@ def get_colorblind_palette_list():
 
 def get_colors_list(palette: str, n_items: Optional[int] = 10) -> list[str]:
     """
-    Return a valid matplotlib palette list 
-    - 'colorblind' is a kind of sns.colorblind 
-    - Quali (Cat) = ['tab10', 'tab20', 'Set1', 'Set2', 'Set3', 'Pastel1', 'Pastel2', 'Dark2', 'Paired', 'Accent', 'colorblind']
-    - Sequen (Order) = ['viridis', 'plasma', 'inferno', 'magma', 'cividis', 'Greys', 'Purples', 'Blues', 'Greens', 'Oranges', 'Reds']
-    - Diverg (MidPoint) = ['coolwarm', 'bwr', 'seismic', 'PiYG', 'PRGn', 'BrBG', 'RdGy', 'RdBu', 'Spectral', 'RdYlGn', 'PuOr', 'RdYlBu']
+    | Return a valid matplotlib palette list    | 'colorblind' is a kind of sns.colorblind 
+    - Qualitatives (Cat) = ['tab10', 'tab20', 'Set1', 'Set2', 'Set3', 'Pastel1', 'Pastel2', 'Dark2', 'Paired', 'Accent', 'colorblind']
+    - Sequential (Order) = ['viridis', 'plasma', 'inferno', 'magma', 'cividis', 'Greys', 'Purples', 'Blues', 'Greens', 'Oranges', 'Reds']
+    - Diverging (MidPoint) = ['coolwarm', 'bwr', 'seismic', 'PiYG', 'PRGn', 'BrBG', 'RdGy', 'RdBu', 'Spectral', 'RdYlGn', 'PuOr', 'RdYlBu']
     - Cyclic (Repeat)= ['twilight', 'twilight_shifted', 'hsv', 'turbo', 'cubehelix', 'gist_rainbow', 'jet', 'nipy_spectral', 'rainbow_r']
     - Mix = ['rainbow', 'flag', 'prism', 'ocean', 'terrain', 'gnuplot', 'CMRmap', 'hot', 'afmhot', 'gist_heat', 'copper', 'bone', 'pink']
     """
@@ -528,32 +527,46 @@ def get_colors_list(palette: str, n_items: Optional[int] = 10) -> list[str]:
     return color_list
 
 
-def show_palettes(palette_group: str='Quali', n_items: int=15) -> plt.Figure:
-
+def show_palettes(palette_group_str: str='Qualitatives', n_items: int=15) -> plt.Figure:
+    
     # Verified palette_group parameter
-    if palette_group not in ['Quali', 'Sequen', 'Diverg', 'Cyclic', 'Mix']:
-        raise ValueError(f"'palette_group' parameter not valid. Only valid 'Quali', 'Sequen', 'Diverg', 'Cyclic', 'Mix'. Got '{palette_group}'.")
+    if palette_group_str.capitalize() not in ['Qualitatives', 'Sequential', 'Diverging', 'Cyclic', 'Mix']:
+        raise ValueError(f"'palette_group' parameter not valid. Only valid 'Qualitatives', 'Sequential', 'Diverging', 'Cyclic', 'Mix'. Got '{palette_group_str}'.")
     
     # Verified n_times parameter
     if n_items < 1 or n_items > 25:
-        raise ValueError(f"'n_items' parameter not valid. Must be > 1 and < 26. Got '{palette_group}'.")
+        raise ValueError(f"'n_items' parameter not valid. Must be > 1 and < 26. Got '{n_items}'.")
     n_items = int(n_items)
 
+    # Create a sample series with n_items
+    sr = to_series({str(i): 1 for i in range(n_items)})
+
     # Palette Group lists
-    Quali = ['tab10', 'tab20', 'Set1', 'Set2', 'Set3', 'Pastel1', 'Pastel2', 'Dark2', 'Paired', 'Accent']
-    Sequen = ['viridis', 'plasma', 'inferno', 'magma', 'cividis', 'Greys', 'Purples', 'Blues', 'Greens', 'Oranges', 'Reds']
-    Diverg = ['coolwarm', 'bwr', 'seismic', 'PiYG', 'PRGn', 'BrBG', 'RdGy', 'RdBu', 'Spectral', 'RdYlGn', 'PuOr', 'RdYlBu']
+    Qualitatives = ['tab10', 'tab20', 'Set1', 'Set2', 'Set3', 'Pastel1', 'Pastel2', 'Dark2', 'Paired', 'Accent', 'colorblind']
+    Sequential = ['viridis', 'plasma', 'inferno', 'magma', 'cividis', 'Greys', 'Purples', 'Blues', 'Greens', 'Oranges', 'Reds', 'GnBu', 'BuPu', 'OrRd', 'PuRd', 'PuBu']
+    Diverging = ['coolwarm', 'bwr', 'seismic', 'PiYG', 'PRGn', 'BrBG', 'RdGy', 'RdBu', 'Spectral', 'RdYlGn', 'PuOr', 'RdYlBu']
     Cyclic = ['twilight', 'twilight_shifted', 'hsv', 'turbo', 'cubehelix', 'gist_rainbow', 'jet', 'nipy_spectral', 'rainbow_r']
     Mix = ['rainbow', 'flag', 'prism', 'ocean', 'terrain', 'gnuplot', 'CMRmap', 'hot', 'afmhot', 'gist_heat', 'copper', 'bone', 'pink']
 
-    sr = to_series({str(i): 1 for i in range(n_items)})
+    # Get the palette group based on the input string (the one selected by the user)
+    palette_group = {'Qualitatives': Qualitatives,
+                     'Sequential': Sequential,
+                     'Diverging': Diverging,
+                     'Cyclic': Cyclic,
+                     'Mix': Mix}[palette_group_str.capitalize()]
+ 
+    # Get the colors lisst for the selected palette group - Each list contains n_items colors
+    color_lists = [get_colors_list(pltt, n_items=len(sr)) for pltt in palette_group]
 
-    for ptte in eval(palette_group):
-        colors = get_colors_list(ptte)
-        fig, ax = plt.subplots(figsize=(12, 1))
-        ax.bar(sr.index, sr, color=colors)
-        ax.set_ylabel(ptte)
-        plt.show()
+    fig, axs = plt.subplots(len(palette_group), 1, figsize=(14, len(palette_group)/1.25), tight_layout=True, sharex=True)
+    fig.suptitle(f"Palettes: {palette_group_str.capitalize()}", fontsize=16, fontweight='bold')
+
+    for ax, pltt, color_list in zip(axs, palette_group, color_lists):
+        ax.bar(sr.index, sr, color=color_list)
+        ax.set_ylabel(pltt)
+    
+    plt.show()
+    return plt.gcf()  # Return the current figure for further manipulation if needed
 
 
 def plt_pie(
