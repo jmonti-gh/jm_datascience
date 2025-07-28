@@ -3,18 +3,12 @@ jm_pandas
 """
 
 ## TO-DO
-# paretto chart calc cumulative % or pass as argument ..... make an fdt function..
 
 ## fdt!
 # Considerar la opción de adicionar los nulls-nans-pd.NAs opcionalmente a la fdt
 # EN REALIDAD el tema de los nans lo tengo que ver en el to_series_with_count()
 
-## Pareto - proportional sizes
-#   title - qué - size - etc
-#   labels, legends, numbers, line size  - size!!
-
-## Pie
-#   Versión con TODO los labels EXTERNO
+## pie - paretto - en lo posible mismos parámetros
 
 ## OJO con la doble función de formateo de datos que tengo... OJO
 # porque debería ajustar tanto esta que tengo acá com la de jm_rchprt o DEJAR SOLO UNA!!!???
@@ -40,7 +34,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.ticker import PercentFormatter  # for pareto chart and ?
 import seaborn as sns
-## Claude - Qwen
 
 
 ## Custom types for non-included typing annotations
@@ -224,14 +217,14 @@ def get_fdt(
         dropna: Optional[bool] = True,
         na_position: Optional[str] = 'last',
         include_pcts: Optional[bool] = True,
-        include_plain_relatives: Optional[bool] = True,
+        include_flat_relatives: Optional[bool] = True,
         fmt_values: Optional[bool] = False,
         order: Optional[str] = 'desc',
-        na_aside_calc: Optional[bool] = True
+        na_aside_calc: Optional[bool] = True,
+        index_name: Optional[str] = None
 ) -> pd.DataFrame:
     """
     Generates a Frequency Distribution Table (FDT) with absolute, relative, and cumulative frequencies.
-        Handles NaN values and allows for various configurations
 
     This function converts various input data types into a structured DataFrame containing:
     - Absolute frequencies
@@ -254,7 +247,7 @@ def get_fdt(
         include_pcts (bool, optional): Whether to include percentage columns.
             If False, only absolute and cumulative frequencies are returned.
             Default is True.
-        include_plain_relatives (bool, optional): Whether to return relative and cumulative relative values.
+        include_flat_relatives (bool, optional): Whether to return relative and cumulative relative values.
             If False, only frequency and percentage columns are included.
             Default is True.
         fmt_values (bool, optional): Whether to format numeric values using `_fmt_value_for_pd`.
@@ -269,6 +262,7 @@ def get_fdt(
         na_aside_calc (bool, optional): Whether to separate NaN values from calculations but keep them in the output.
             If True, NaNs are added at the end and not included in cumulative or relative calculations.
             Default is True.
+        index_name (str, optional): Set an specific index name for the fdt.
 
     Returns:
         pd.DataFrame: A DataFrame containing the frequency distribution table with the following columns
@@ -307,8 +301,9 @@ def get_fdt(
         'Relative Freq. [%]',
         'Cumulative Freq. [%]'
     ]
-   
-    sr = to_series(data)                        # Convert the input data to a pd.Series
+    # def _calculate_fdt_relatives(series):     # Revisar, no me gusta el flujo actual
+    
+    sr = to_series(data)
     
     if dropna:
         sr = sr.dropna()                        # Drop all nulls values of the Series
@@ -317,10 +312,8 @@ def get_fdt(
     if value_counts:
         sr = sr.value_counts(dropna=dropna, sort=False)
 
-    _validate_numeric_series(sr)                # Validate that all the values are positive numbers
-
-    # Get the index name or use 'Index' if None - will use it later to set the index name in pd.concat cases
-    sr_ixname = sr.index.name if sr.index.name else 'Index'
+    # Validate that all the values are positive numbers
+    _validate_numeric_series(sr)
 
     # Order de original Series to obtain the fdt in the same order as the original data
     match order:
@@ -355,10 +348,8 @@ def get_fdt(
         match na_position:             
             case 'first':
                 sr = pd.concat([pd.Series({np.nan: n_nans}), sr_without_nan])
-                sr.index.name = sr_ixname       # Set the index name to the Series
             case 'last':
                 sr = pd.concat([sr_without_nan, pd.Series({np.nan: n_nans})])
-                sr.index.name = sr_ixname       # Set the index name to the Series
             case 'value' | None:
                 pass                # Locates the Nulls row based on the value or index ordering
             case _:
@@ -375,16 +366,20 @@ def get_fdt(
 
     if na_aside_calc and not dropna:            # We add nan_columns at the end
         fdt = pd.concat([fdt, nan_row_df])
-        fdt.index.name = sr_ixname              # Set the index name to the DataFrame
 
-    if not include_pcts:                        # Don't return percentage columns
-        fdt = fdt[columns[0:4]]
-    
-    if not include_plain_relatives:             # Don't return relative and plain cumulative
-        fdt = fdt[[columns[0], columns[4], columns[5]]]
+    # Logic to include: only frequencies, or only flat relatives, or percentage (pcts)
+    if not include_pcts and not include_flat_relatives:
+        fdt = fdt[[columns[0]]]                             # Only 'Frecquency' (col[0]) - doble[[]] to get a DF
+    elif not include_pcts and include_flat_relatives:
+        fdt = fdt[columns[0:4]]                             # 'Frequency' + plain_relative cols (col[0,1,2,3])
+    elif include_pcts and not include_pcts:
+        fdt = fdt[[columns[0], columns[4], columns[5]]]     # 'Frequency' + pcts cols (last two cols)
 
     if fmt_values:
         fdt = fdt.map(_fmt_value_for_pd)
+
+    # Set the index name
+    fdt.index.name = index_name if index_name else sr.index.name
         
     return fdt
 
@@ -515,43 +510,68 @@ def get_colorblind_palette_list():
 
 
 def get_colors_list(palette: str, n_items: Optional[int] = 10) -> list[str]:
-    '''
-    Return a valid matplotlib palette list
-    - 'colorbind', 'viridis', 'plasma', 'inferno', 'magma', 'cividis', 'set3', 'set2'
-    - 'Accent', 'Accent_r', 'Blues', 'Blues_r', 'BrBG', 'BrBG_r', 'BuGn', 'BuGn_r', 'BuPu'
-    - 'Grays', 'Grays_r', 'Greens', 'Greens_r', 'Greys', 'Greys_r', 'OrRd', 'OrRd_r',
-    - 'Pastel1_r', 'Pastel2', 'Pastel2_r', 'PiYG', 'PiYG_r', 'PuBu', 'PuBuGn', 'PuBuGn_r'
-    - 'vanimo', 'vanimo_r', 'viridis', 'viridis_r', 'winter', 'winter_r'",
-    '''
-
+    """
+    Return a valid matplotlib palette list 
+    - 'colorblind' is a kind of sns.colorblind 
+    - Quali (Cat) = ['tab10', 'tab20', 'Set1', 'Set2', 'Set3', 'Pastel1', 'Pastel2', 'Dark2', 'Paired', 'Accent', 'colorblind']
+    - Sequen (Order) = ['viridis', 'plasma', 'inferno', 'magma', 'cividis', 'Greys', 'Purples', 'Blues', 'Greens', 'Oranges', 'Reds']
+    - Diverg (MidPoint) = ['coolwarm', 'bwr', 'seismic', 'PiYG', 'PRGn', 'BrBG', 'RdGy', 'RdBu', 'Spectral', 'RdYlGn', 'PuOr', 'RdYlBu']
+    - Cyclic (Repeat)= ['twilight', 'twilight_shifted', 'hsv', 'turbo', 'cubehelix', 'gist_rainbow', 'jet', 'nipy_spectral', 'rainbow_r']
+    - Mix = ['rainbow', 'flag', 'prism', 'ocean', 'terrain', 'gnuplot', 'CMRmap', 'hot', 'afmhot', 'gist_heat', 'copper', 'bone', 'pink']
+    """
     if palette == 'colorblind':
-        colors_list = get_colorblind_palette_list()
-    elif palette == 'set2':
-        colors_list = plt.cm.Set2(np.linspace(0, 1, n_items))
-    elif palette == 'set3':
-        colors_list = plt.cm.Set3(np.linspace(0, 1, n_items))
+        color_list = get_colorblind_palette_list()
     else:
-        cmap = plt.get_cmap(palette, n_items)              # Use palette colormap
-        colors_list = [cmap(i) for i in range(n_items)]    # Get colors from the colormap
+        cmap = plt.get_cmap(palette, n_items)             # Use palette colormap
+        color_list = [cmap(i) for i in range(n_items)]    # Get colors from the colormap
 
-    return colors_list
+    return color_list
+
+
+def show_palettes(palette_group: str='Quali', n_items: int=15) -> plt.Figure:
+
+    # Verified palette_group parameter
+    if palette_group not in ['Quali', 'Sequen', 'Diverg', 'Cyclic', 'Mix']:
+        raise ValueError(f"'palette_group' parameter not valid. Only valid 'Quali', 'Sequen', 'Diverg', 'Cyclic', 'Mix'. Got '{palette_group}'.")
+    
+    # Verified n_times parameter
+    if n_items < 1 or n_items > 25:
+        raise ValueError(f"'n_items' parameter not valid. Must be > 1 and < 26. Got '{palette_group}'.")
+    n_items = int(n_items)
+
+    # Palette Group lists
+    Quali = ['tab10', 'tab20', 'Set1', 'Set2', 'Set3', 'Pastel1', 'Pastel2', 'Dark2', 'Paired', 'Accent']
+    Sequen = ['viridis', 'plasma', 'inferno', 'magma', 'cividis', 'Greys', 'Purples', 'Blues', 'Greens', 'Oranges', 'Reds']
+    Diverg = ['coolwarm', 'bwr', 'seismic', 'PiYG', 'PRGn', 'BrBG', 'RdGy', 'RdBu', 'Spectral', 'RdYlGn', 'PuOr', 'RdYlBu']
+    Cyclic = ['twilight', 'twilight_shifted', 'hsv', 'turbo', 'cubehelix', 'gist_rainbow', 'jet', 'nipy_spectral', 'rainbow_r']
+    Mix = ['rainbow', 'flag', 'prism', 'ocean', 'terrain', 'gnuplot', 'CMRmap', 'hot', 'afmhot', 'gist_heat', 'copper', 'bone', 'pink']
+
+    sr = to_series({str(i): 1 for i in range(n_items)})
+
+    for ptte in eval(palette_group):
+        colors = get_colors_list(ptte)
+        fig, ax = plt.subplots(figsize=(12, 1))
+        ax.bar(sr.index, sr, color=colors)
+        ax.set_ylabel(ptte)
+        plt.show()
 
 
 def plt_pie(
     data: Union[pd.Series, np.ndarray, dict, list, set, pd.DataFrame],
     value_counts: Optional[bool] = False,
-    sort: Optional[bool] = True,
     dropna: Optional[bool] = True,
+    order: Optional[str] = 'desc',
     scale: Optional[int] = 1,
     figsize: Optional[tuple[float, float]] = None,
     title: Optional[str] = None,
     kind: Optional[str] = 'pie',
     label_place: Optional[str] = 'ext',
     palette: Optional[list] = 'colorblind',
-    startangle: Optional[float] = -40,
+    startangle: Optional[float] = 90,
     pct_decimals: Optional[int] = 1,
     label_rotate: Optional[float] = 0,
     legend_loc: Optional[str] = 'best',
+    show_stats_subtitle = True
 ) -> tuple[plt.Figure, plt.Axes]:
     """
     Generates a pie or donut chart with customizable label placement and styling.
@@ -613,21 +633,29 @@ def plt_pie(
         >>> fig, ax = plt_pie3(data, kind='donut', label_place='aside', title='Distribution of Categories')
         >>> plt.show()
     """
+    # Get the data to graph: use controls and processing that get_fdt() does to obtain the series to graph (first column: 'Frequency')
+    fdt = get_fdt(data, value_counts=value_counts, order=order,
+                  dropna=False, na_position='value', na_aside_calc=False, include_flat_relatives=False, include_pcts=False)
+        # - dropna=False            -> So that it doesn't remove NaNs, and then handle them
+        # - na_aside_calc=False     -> So that it allows me to sort the nan value with na_position='value'
+        # - na_position='value'     -> So that it allows me to sort the nan value within the list of values either desc or asc (according to order)
+        # - We do not include relative flat rates or percentages. We calculate the percentages before presenting them.
 
-    # Convert to serie in case of np.ndarray, dict, list, set, or pd.DataFrame
-    sr = to_series(data)
-    n_nans = sr.isna().sum()                    # original number of nans, for statistical subtitle info
+    cat_name = fdt.index.name                       # Category name <- from fdt.index.name (could be 'Index' Warn!)
 
-    if dropna:
-        sr = sr.dropna()                        # Drop NaN values if dropna is True
-        total_label = 'Total (without Nulls):'  # for statistical subtitle info
-    else:
-        total_label = 'Total (with Nulls):'
-
-    if value_counts:
-        sr = sr.value_counts(sort=sort, dropna=dropna)
-
-    _validate_numeric_series(sr)
+    sr = fdt.iloc[:, 0]                             # Get the Series with the frequencies (count)
+    # As sr.index build the legends: If I want to change the legends, I'll have to see how I modify this sr.index (must be done previously aside)
+         
+    # Handling of nans since they are presented in the subtitle, whether or not they appear in the graph
+    total_label = "Total (w/ nulls)"                # Default total_label to be presented in subtitle
+    
+    if pd.isna(sr.index).any():                     # There is np.nan [NaN] index, nans values
+        n_nans = sr[np.nan]
+        if dropna:                                  # No NaNs in the graph
+            sr = sr.drop(np.nan, errors='ignore')   # Drop NaN row from the DataFrame
+            total_label = "Total (wo/ nulls)"       # The total will be calculated wo/NaNs (likewise, n_nans will appear in the subtitle.)
+    else:                                           # No np.nan row
+        n_nans = 0
 
     # Validate kind parameter
     if kind.lower() not in ['pie', 'donut']:
@@ -660,7 +688,7 @@ def plt_pie(
     # Base fig definitions
     fig, ax = plt.subplots(figsize=figsize, subplot_kw=dict(aspect="equal"))
 
-    # Configure wedge properties for donut  or pie chart
+    # Configure wedge properties for donut or pie chart
     wedgeprops = {}
     if kind.lower() == 'donut':
         wedgeprops = {'width': 0.54, 'edgecolor': 'white', 'linewidth': 1}
@@ -742,20 +770,18 @@ def plt_pie(
     else:
         raise ValueError(f"Invalid labe_place parameter. Must be 'ext', 'int' or 'aside', not '{label_place}'.")
             
-    # Build title
+    # Build title and set title
     if not title:
-        title = f"Pie/Donut Chart - ({sr.name})"
+        title = f"Pie/Donut Chart ({cat_name} - {sr.name})"
+    ax.set_title(title, fontsize=title_size, fontweight='bold')
 
-    # Enhanced subtitle with statistics
-    total_items = sr.sum()                  # Total items in the series
-    n_categories = len(sr)                  # len(categories)
-    top_2_pct = (sr.head(2).sum() / total_items * 100) if n_categories >= 3 else (sr.sum() / total_items * 100)
+    if show_stats_subtitle:                     # Enhanced subtitle with statistics
+        total_items = sr.sum()                  # Total items in the series
+        n_categories = len(sr)                  # len(categories)
+        top_2_pct = (sr.head(2).sum() / total_items * 100) if n_categories >= 3 else (sr.sum() / total_items * 100)
 
-    subtitle = f"{total_label} {total_items:,} | Categories: {n_categories} | Top 2: {top_2_pct:.1f}% | Nulls: {n_nans}"
-
-    # Set the title and subtitle
-    ax.set_title(title, fontdict={'size': title_size, 'weight': 'bold'})
-    ax.text(0, 1.18, subtitle, ha='center', va='center', fontsize=title_size * 0.6, color='dimgray')
+        subtitle = f"{total_label} {total_items:,} | Categories: {n_categories} | Top 2: {top_2_pct:.1f}% | Nulls (nan): {n_nans}"
+        ax.text(0, 1.18, subtitle, ha='center', va='center', fontsize=title_size * 0.6, color='dimgray')
 
     return fig, ax
 
