@@ -27,6 +27,7 @@ __last_modified__ = "2025-06-30"
 
 ## Standard Libs
 from typing import Union, Optional, Any, Literal, Sequence, TypeAlias
+import random
 
 # Third-Party Libs
 import numpy as np
@@ -527,46 +528,110 @@ def get_colors_list(palette: str, n_items: Optional[int] = 10) -> list[str]:
     return color_list
 
 
-def show_palettes(palette_group_str: str='Qualitatives', n_items: int=15) -> plt.Figure:
-    
-    # Verified palette_group parameter
-    if palette_group_str.capitalize() not in ['Qualitatives', 'Sequential', 'Diverging', 'Cyclic', 'Mix']:
-        raise ValueError(f"'palette_group' parameter not valid. Only valid 'Qualitatives', 'Sequential', 'Diverging', 'Cyclic', 'Mix'. Got '{palette_group_str}'.")
+def show_plt_palettes(palette_group_key: str='Sample', n_items: int=16) -> plt.Figure:
+    """
+    Displays a visual sample of Matplotlib color palettes grouped by category.
+
+    This function creates a vertical subplot for each palette in a selected group,
+    showing how colors are distributed across a bar chart. It supports four main
+    Matplotlib palette categories: Qualitative, Sequential, Diverging, and Cyclic.
+    If no specific group is provided, it displays a representative sample of all groups.
+
+    Parameters:
+        palette_group_key (str, optional): Name of the palette group to display. Valid options:
+            - 'Qualitative': for categorical data.
+            - 'Sequential': for ordered or monotonic data.
+            - 'Diverging': for data with a meaningful midpoint.
+            - 'Cyclic': for periodic data (e.g., angles, phases).
+            - 'Sample' (default): shows a mixed sample of 4 palettes from each group.
+
+            The input is case-insensitive and automatically capitalized.
+
+        n_items (int, optional): Number of color items (bars) to display per palette.
+            Must be between 1 and 25 (inclusive). Default is 15.
+
+    Returns:
+        matplotlib.figure.Figure: The generated figure object containing all subplots.
+            This allows further customization or saving after display.
+
+    Raises:
+        ValueError: If `n_items` is not in the valid range (1–25).
+
+    Notes:
+        - Invalid or deprecated Matplotlib colormaps are handled gracefully and labeled accordingly.
+        - The function uses `get_colors_list` internally to extract colors from each palette.
+        - Useful for exploring and selecting appropriate color schemes for data visualization.
+
+    Example:
+        >>> show_plt_palettes('Sequential', n_items=10)
+        # Displays 10-color bars for all Sequential palettes.
+
+        >>> show_plt_palettes()
+        # Shows a default sample of 4 palettes from each category.
+    """
     
     # Verified n_times parameter
     if n_items < 1 or n_items > 25:
         raise ValueError(f"'n_items' parameter not valid. Must be > 1 and < 26. Got '{n_items}'.")
-    n_items = int(n_items)
+    n_items = int(n_items) + 1
 
-    # Create a sample series with n_items
-    sr = to_series({str(i): 1 for i in range(n_items)})
-
-    # Palette Group lists
-    Qualitatives = ['tab10', 'tab20', 'Set1', 'Set2', 'Set3', 'Pastel1', 'Pastel2', 'Dark2', 'Paired', 'Accent', 'colorblind']
-    Sequential = ['viridis', 'plasma', 'inferno', 'magma', 'cividis', 'Greys', 'Purples', 'Blues', 'Greens', 'Oranges', 'Reds', 'GnBu', 'BuPu', 'OrRd', 'PuRd', 'PuBu']
-    Diverging = ['coolwarm', 'bwr', 'seismic', 'PiYG', 'PRGn', 'BrBG', 'RdGy', 'RdBu', 'Spectral', 'RdYlGn', 'PuOr', 'RdYlBu']
-    Cyclic = ['twilight', 'twilight_shifted', 'hsv', 'turbo', 'cubehelix', 'gist_rainbow', 'jet', 'nipy_spectral', 'rainbow_r']
-    Mix = ['rainbow', 'flag', 'prism', 'ocean', 'terrain', 'gnuplot', 'CMRmap', 'hot', 'afmhot', 'gist_heat', 'copper', 'bone', 'pink']
-
-    # Get the palette group based on the input string (the one selected by the user)
-    palette_group = {'Qualitatives': Qualitatives,
-                     'Sequential': Sequential,
-                     'Diverging': Diverging,
-                     'Cyclic': Cyclic,
-                     'Mix': Mix}[palette_group_str.capitalize()]
- 
-    # Get the colors lisst for the selected palette group - Each list contains n_items colors
-    color_lists = [get_colors_list(pltt, n_items=len(sr)) for pltt in palette_group]
-
-    fig, axs = plt.subplots(len(palette_group), 1, figsize=(14, len(palette_group)/1.25), tight_layout=True, sharex=True)
-    fig.suptitle(f"Palettes: {palette_group_str.capitalize()}", fontsize=16, fontweight='bold')
-
-    for ax, pltt, color_list in zip(axs, palette_group, color_lists):
-        ax.bar(sr.index, sr, color=color_list)
-        ax.set_ylabel(pltt)
+    # Palette_group selection
+    palette_group_key = palette_group_key.strip().capitalize() 
     
+    # 1. Palette Group lists
+    Qualitative = ['Accent', 'colorblind', 'Dark2', 'Dark2_r', 'flag', 'Paired', 'Pastel1', 'Pastel2',
+                    'prism', 'Set1', 'Set2', 'Set3', 'tab10', 'tab20', 'tab20b', 'tab20c']
+
+    Sequential = ['autumn', 'binary', 'Blues', 'brg', 'BuPu', 'cividis', 'cool', 'GnBu',
+            #   'Greens', 'Greys', 'Greys_r', 'gnuplot', 'inferno', 'magma', 'ocean', 'Oranges',
+                'OrRd', 'plasma', 'PuRd', 'Purples', 'Reds', 'terrain', 'viridis', 'Wistia']
+
+    Diverging = ['BrBG', 'bwr', 'bwr_r', 'coolwarm', 'PiYG', 'PiYG_r', 'PRGn', 'PRGn_r',
+                 'PuOr', 'RdBu', 'RdGy', 'RdYlBu', 'RdYlGn', 'seismic', 'Spectral', 'Spectral_r']
+
+    Cyclic = ['berlin', 'berlin_r', 'cubehelix', 'cubehelix_r', 'flag_r', 'gist_rainbow', 'hsv', 'managua',
+              'nipy_spectral', 'rainbow', 'rainbow_r', 'twilight', 'twilight_shifted', 'turbo', 'vanimo']
+
+    # 2. Get the palette group (and _desc) based on the input string (the one selected by the user)
+    palette_group_dic = {
+        'Qualitative': (Qualitative, 'for categorical data'),
+        'Sequential': (Sequential, 'for data that has an order'),
+        'Diverging': (Diverging, 'for data that have a significant midpoint'),
+        'Cyclic': (Cyclic, 'for data that repeats, such as angles or phases'),
+    }
+
+    defaults_for_sample = ('Sample', 'of Matplotlib palettes')
+    palette_group = palette_group_dic.get(palette_group_key, defaults_for_sample)[0]         # Get the list of palettes for the selected group
+    palette_group_desc = palette_group_dic.get(palette_group_key, defaults_for_sample)[1]    # Get the description for the selected group
+
+    # Build a Series of n_items elements to show colors
+    sr = to_series({str(i): 1 for i in range(1, n_items)})
+    
+    # Build the bar chart showing palette colors
+    if palette_group == 'Sample':
+        palette_group_key = palette_group        # Special case of sample of three from each group
+        palette_group = [palette for p_g in [Qualitative, Sequential, Diverging, Cyclic] for palette in random.sample(p_g, k=4)]
+
+    # Build the fig and subplots
+    fig, axs = plt.subplots(len(palette_group), 1, figsize=(12, len(palette_group)/1.25), tight_layout=True, sharex=True)
+    fig.text(0.35, 0.985, f"{palette_group_key}; {palette_group_desc}", fontsize=12, fontweight='medium')
+
+    if palette_group_key == 'Sample':
+        fig.suptitle(f"4 Qualitative (categorical data), 4 Sequential (ordered data), 4 Diverging (significant midpoint)\
+, and 4 Cyclic (repeated data)", fontsize=8)
+                                                
+    for ax, pltt in zip(axs, palette_group):
+        try:
+            color_list = get_colors_list(pltt, n_items=n_items)
+            ax.bar(sr.index, sr, color=color_list)
+        except ValueError:
+            pltt = f"'{pltt}' is not currently a valid Matplotlib palette (cmap)"
+        finally:
+            ax.set_title(pltt, loc='left', fontsize=8, fontweight='medium')
+            ax.set_yticks([])       # Hide y-ticks for cleaner look
+
     plt.show()
-    return plt.gcf()  # Return the current figure for further manipulation if needed
+    return plt.gcf()                # Return the current figure for further manipulation if needed
 
 
 def plt_pie(
