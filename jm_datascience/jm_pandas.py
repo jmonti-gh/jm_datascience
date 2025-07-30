@@ -77,8 +77,8 @@ def _fmt_value_for_pd(value, width=8, n_decimals=3, thousands_sep=',') -> str:
     if not isinstance(width, int) or width <= 0:
         raise ValueError(f"Width must be a positive integer. Not '{width}'")
     
-    if not isinstance(decimals, int) or decimals < 0:
-        raise ValueError(f"Decimals must be a non-negative integer. Not '{decimals}")
+    if not isinstance(n_decimals, int) or n_decimals < 0:
+        raise ValueError(f"Decimals must be a non-negative integer. Not '{n_decimals}")
     
     if thousands_sep not in [',', '_', None]:
         raise ValueError(f"Miles must be either ',', '_', or None. Not '{thousands_sep}")
