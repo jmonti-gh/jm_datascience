@@ -530,7 +530,7 @@ def get_colors_list(palette: str, n_items: Optional[int] = 10) -> list[str]:
 
 def show_plt_palettes(
         palette_group: Union[str, list[str]] = 'Sample',
-        n_items: Optional[int]=16,
+        n_items: Optional[int]=14,
 ) -> plt.Figure:
     """
     Displays a visual comparison of Matplotlib color palettes in a two-column layout.
@@ -615,7 +615,7 @@ def show_plt_palettes(
         'Custom': (Custom, 'user selected palettes'),
     }
 
-    defaults_for_sample = ('Sample', '')
+    defaults_for_sample = ('Sample', 'a sample of four of each category')
     # Get the list of palettes for the selected group and its description
     selected_palettes, palette_group_desc = palette_group_dic.get(palette_group_key, defaults_for_sample)
 
@@ -640,22 +640,193 @@ def show_plt_palettes(
     fig.suptitle(f"Matplolib {palette_group_key} palettes (cmap): {palette_group_desc}", fontsize=14, fontweight='medium', y=1.001)
 
     if palette_group_key == 'Sample':
-        fig.text(0.15, 0.95, "4 Qualitative (for categorical data), 4 Sequential (for ordered data), 4 Diverging \
-(significant midpoint), and 4 Cyclic (for repeated data)", fontsize=10, transform=fig.transFigure)
+        fig.text(0.15, 0.95, "4 Qualitative (for categorical data), 4 Sequential (for ordered data),"
+                             "4 Diverging (significant midpoint), and 4 Cyclic (for repeated data)",
+                    fontsize=10, transform=fig.transFigure)
 
     # Iterate over the axes and palette group to plot each palette                                           
     for ax, pltt in zip(axs.flatten(), palette_group):
         try:
             color_list = get_colors_list(pltt, n_items=n_items)
-            ax.bar(sr.index, sr, color=color_list)
-        except ValueError:
-            pltt = f"'{pltt}' is not currently a valid Matplotlib palette (cmap)"
-        finally:
+            ax.bar(sr.index, sr, color=color_list, width=1, edgecolor='white', linewidth=0.2)
+            ax.set_xlim(-0.5, n_items - 1.5)
+            ax.set_ylim(0, 0.1)
             ax.set_title(pltt, loc='left', fontsize=10, fontweight='medium')
-            ax.set_yticks([])       # Hide y-ticks for cleaner look
+        except ValueError:
+            err_msg = f"'{pltt}' is not currently a valid Matplotlib palette (cmap)"
+            ax.set_title(err_msg, loc='left', fontsize=10, fontweight='medium', color='red')
+
+        ax.set_yticks([])       # Hide y-ticks for cleaner look
+        ax.set_xticks([])       # Hide x-ticks
 
     plt.show()
-    return plt.gcf()                # Return the current figure for further manipulation if needed
+    return fig                  # Return the current figure for further manipulation if needed
+
+
+def show_sns_palettes(
+    palette_group: Union[str, list[str]] = 'Sample',
+    n_items: Optional[int] = 14,
+) -> plt.Figure:
+    """
+    Displays a visual comparison of Seaborn color palettes in a two-column layout.
+
+    This function creates a grid of bar charts, each showing the color progression of a
+    specific Seaborn (or Matplotlib-compatible) colormap. It supports built-in palette groups
+    (Qualitative, Sequential, Diverging, Cyclic), a default 'Sample' view, and custom lists of palettes.
+
+    Parameters:
+        palette_group (Union[str, list[str]]): Specifies which palettes to display:
+            - If str: one of 'Qualitative', 'Sequential', 'Diverging', 'Cyclic', or 'Sample'.
+              Case-insensitive; will be capitalized.
+            - If list: a custom list of colormap names to display.
+            - Default is 'Sample', which shows a representative selection from all groups.
+        n_items (int, optional): Number of color swatches (bars) to display per palette.
+            Must be between 1 and 25 (inclusive). Default is 16.
+
+    Returns:
+        matplotlib.figure.Figure: The generated figure object containing all subplots.
+            This allows further customization, saving, or inspection after display.
+
+    Raises:
+        TypeError: If `palette_group` is not a string or list of strings, or if `n_items`
+            is not a number.
+        ValueError: If `n_items` is not in the valid range (1–25).
+
+    Notes:
+        - Invalid or deprecated colormap names are handled gracefully and labeled accordingly.
+        - The layout adapts to the number of palettes, using two columns for better readability.
+        - Uses `seaborn.color_palette` internally for color extraction and `matplotlib.axes.Axes.barh`
+          for display.
+        - Ideal for exploring and selecting appropriate color schemes for data visualization.
+
+    Example:
+        >>> show_sns_palettes('Sequential', n_items=10)
+        # Displays 10-color samples for all Sequential palettes.
+
+        >>> show_sns_palettes(['viridis', 'plasma', 'coolwarm', 'rainbow'], n_items=12)
+        # Shows a custom comparison of four specific palettes.
+
+        >>> show_sns_palettes()
+        # Shows a default sample of 4 palettes from each category.
+    """
+
+    # Verified n_items parameter
+    if not isinstance(n_items, (int, float)):
+        raise TypeError(f"'n_items' parameter not valid. Must be an int or float. Got '{type(n_items)}'.")
+
+    if n_items < 1 or n_items > 25:
+        raise ValueError(f"'n_items' parameter not valid. Must be > 1 and < 26. Got '{n_items}'.")
+    n_colors = int(n_items) # Use n_colors internally for consistency with seaborn
+
+    # Palette_group selection + custom palette_group and palette_group parameter validation
+    Custom = []                                     # Default empty list for custom palettes
+    if isinstance(palette_group, str):
+        palette_group_key = palette_group.strip().capitalize()
+    elif isinstance(palette_group, list):
+        # Convert all custom palette names to strings just in case
+        Custom = [str(p) for p in palette_group]
+        palette_group_key = 'Custom'
+    else:
+        raise TypeError(f"'palette_group' parameter not valid. Must be a string or a list. Got {type(palette_group)}.")
+
+    # 1. Native palette Group lists (Seaborn often uses these names directly)
+    Qualitative = ['Accent', 'bright', 'colorblind', 'dark', 'Dark2', 'Dark2_r', 'deep', 'flag',
+                   'muted', 'Paired', 'Pastel1', 'Pastel2', 'prism', 'Set1', 'Set2', 'Set3',
+                   'tab10', 'tab20', 'tab20b', 'tab20c']        # deep, muted, bright, pastel, dark, colorblind
+
+    Sequential = ['autumn', 'binary', 'Blues', 'brg', 'BuPu', 'cividis', 'cool', 'crest',
+                  'flare', 'GnBu', 'Greens', 'Greys', 'Greys_r', 'gnuplot', 'inferno', 'magma',
+                  'mako', 'ocean', 'Oranges', 'OrRd', 'plasma', 'PuRd', 'Purples', 'Reds',
+                  'rocket', 'terrain', 'viridis', 'Wistia']     # rocket, mako, flare, crest
+
+    Diverging = ['BrBG', 'bwr', 'bwr_r', 'coolwarm', 'icefire', 'PiYG', 'PiYG_r', 'PRGn',
+                 'PRGn_r', 'PuOr', 'RdBu', 'RdGy', 'RdYlBu', 'RdYlGn', 'seismic', 'Spectral',
+                 'Spectral_r', 'vlag']                          # vlag, icefire
+
+    Cyclic = ['berlin', 'cubehelix', 'cubehelix_r', 'flag_r', 'gist_rainbow', 'hsv', 'jet_r', 'managua',
+              'nipy_spectral', 'rainbow', 'rainbow_r', 'twilight', 'twilight_shifted', 'turbo', 'vanimo',
+              'twilight_r', 'twilight_shifted_r', 'turbo_r']
+
+    # 2. Get the palette group (and _desc) based on the input string (the one selected by the user)
+    palette_group_dic = {
+        'Qualitative': (Qualitative, 'for categorical data'),
+        'Sequential': (Sequential, 'for data that has an order'),
+        'Diverging': (Diverging, 'for data that have a significant midpoint'),
+        'Cyclic': (Cyclic, 'for data that repeats, such as angles or phases'),
+        'Custom': (Custom, 'user selected palettes'),
+    }
+
+    defaults_for_sample = ('Sample', 'a sample of four from each category')
+    # Get the list of palettes for the selected group and its description
+    selected_palettes, palette_group_desc = palette_group_dic.get(palette_group_key, defaults_for_sample)
+
+    # Adjust the palette_group for the 'Sample' (four from each group) case.
+    # Any value different from the main groups
+    if palette_group_key not in ('Qualitative', 'Sequential', 'Diverging', 'Cyclic', 'Custom'):
+        palette_group_key = 'Sample'
+        # Ensure k is not greater than list length for random.sample
+        k_val_qual = min(4, len(Qualitative))
+        k_val_seq = min(4, len(Sequential))
+        k_val_div = min(4, len(Diverging))
+        k_val_cyc = min(4, len(Cyclic))
+        
+        # Use separate random samples to ensure up to 4 distinct palettes from each group
+        palette_group = (random.sample(Qualitative, k=k_val_qual) +
+                         random.sample(Sequential, k=k_val_seq) +
+                         random.sample(Diverging, k=k_val_div) +
+                         random.sample(Cyclic, k=k_val_cyc))
+    else:
+        palette_group = selected_palettes # If not 'Sample' (all others, custom included), use the selected palettes
+
+    # Create a figure with a flexible grid
+    num_palettes = len(palette_group)
+    cols = 2
+    rows = (num_palettes + cols - 1) // cols # Ceiling division
+
+    # Adjust figure size
+    fig_width = 12
+    # Base height per row for horizontal bars
+    fig_height_per_row = 0.5
+    # Total height, adding space for titles/supertitles
+    fig_height = rows * fig_height_per_row + 1.5
+
+    fig, axs = plt.subplots(rows, cols, figsize=(fig_width, fig_height), layout='tight')
+    axs = axs.flatten() # Flatten the array of axes for easy iteration
+
+    # Set the figure title with the palette group key and description
+    fig.suptitle(f"Seaborn {palette_group_key} palettes (cmap): {palette_group_desc}",
+                 fontsize=14, fontweight='medium', y=1.001) # Adjust y for suptitle
+
+    if palette_group_key == 'Sample':
+        fig.text(0.5, 0.94, "4 Qualitative (for categorical data), 4 Sequential (for ordered data), "
+                            "4 Diverging (significant midpoint), and 4 Cyclic (for repeated data)",
+                 fontsize=10, ha='center', transform=fig.transFigure)
+
+    # Iterate over the axes and palette group to plot each palette
+    for i, pltt in enumerate(palette_group):
+        ax = axs[i]
+        try:
+            # Use sns.color_palette to get the colors
+            colors = sns.color_palette(pltt, n_colors=n_colors)
+            # Manually draw horizontal bars
+            for j, color in enumerate(colors):
+                ax.barh(0, 1, left=j, color=color, height=1, edgecolor='none')
+            ax.set_xlim(0, n_colors)
+            ax.set_ylim(-0.5, 0.5)      # Center the bar vertically
+            ax.set_title(pltt, loc='left', fontsize=10, fontweight='medium')
+        except ValueError:         
+            err_msg = f"'{pltt}' is not currently a valid Matplotlib palette (cmap)"
+            ax.set_title(err_msg, loc='left', fontsize=10, fontweight='medium', color='red')
+
+        ax.set_yticks([]) # Hide y-ticks
+        ax.set_xticks([]) # Hide x-ticks
+
+    # Hide any unused subplots
+    for j in range(i + 1, len(axs)):
+        fig.delaxes(axs[j])
+
+    plt.show()
+    return fig
 
 
 def plt_pie(
