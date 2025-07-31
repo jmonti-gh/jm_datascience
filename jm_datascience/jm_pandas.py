@@ -13,7 +13,7 @@ jm_pandas
 ## OJO con la doble función de formateo de datos que tengo... OJO
 # porque debería ajustar tanto esta que tengo acá com la de jm_rchprt o DEJAR SOLO UNA!!!???
 # NO SE si conviene hacer dos porque en el caso de series tengo que considerar que NO es bueno mezclar n decimal con 0 decimals en una MISMA Series
-# caso del cumulative relative frequency
+# caso del cumulative relative frequency.
 
 __version__ = "0.1.0"
 __description__ = "Custom pandas functions for data cleaning and manipulation."
@@ -495,7 +495,7 @@ def petty_decimals_and_str(series):
 #   - ...
 
 
-def get_colorblind_palette_list():
+def get_colorblind_color_list():
     """
     Retorna una lista de colores (hexadecimales) amigables para personas
     con daltonismo, equivalentes a sns.color_palette('colorblind').
@@ -510,7 +510,7 @@ def get_colorblind_palette_list():
     ]
 
 
-def get_colors_list(palette: str, n_items: Optional[int] = 10) -> list[str]:
+def get_color_list(palette: str, n_items: Optional[int] = 10) -> list[str]:
     """
     | Return a valid matplotlib palette list    | 'colorblind' is a kind of sns.colorblind 
     - Qualitatives (Cat) = ['tab10', 'tab20', 'Set1', 'Set2', 'Set3', 'Pastel1', 'Pastel2', 'Dark2', 'Paired', 'Accent', 'colorblind']
@@ -520,7 +520,7 @@ def get_colors_list(palette: str, n_items: Optional[int] = 10) -> list[str]:
     - Mix = ['rainbow', 'flag', 'prism', 'ocean', 'terrain', 'gnuplot', 'CMRmap', 'hot', 'afmhot', 'gist_heat', 'copper', 'bone', 'pink']
     """
     if palette == 'colorblind':
-        color_list = get_colorblind_palette_list()
+        color_list = get_colorblind_color_list()
     else:
         cmap = plt.get_cmap(palette, n_items)             # Use palette colormap
         color_list = [cmap(i) for i in range(n_items)]    # Get colors from the colormap
@@ -647,7 +647,7 @@ def show_plt_palettes(
     # Iterate over the axes and palette group to plot each palette                                           
     for ax, pltt in zip(axs.flatten(), palette_group):
         try:
-            color_list = get_colors_list(pltt, n_items=n_items)
+            color_list = get_color_list(pltt, n_items=n_items)
             ax.bar(sr.index, sr, color=color_list, width=1, edgecolor='white', linewidth=0.2)
             ax.set_xlim(-0.5, n_items - 1.5)
             ax.set_ylim(0, 0.1)
@@ -969,7 +969,7 @@ def plt_pie(
         wedgeprops = {'edgecolor': 'white', 'linewidth': 0.5}
 
     # Define colors
-    color_palette = get_colors_list(palette, len(sr))
+    color_palette = get_color_list(palette, len(sr))
 
     if label_place == 'ext':
 
@@ -1197,7 +1197,7 @@ def plt_pareto(
 
     # Set up colors
     if palette:
-        color_palette = get_colors_list(palette, fdt.shape[0])
+        color_palette = get_color_list(palette, fdt.shape[0])
         color1 = color_palette[0]                                   # In this case don't consider color1 parameter
     else:
         color_palette = color1
